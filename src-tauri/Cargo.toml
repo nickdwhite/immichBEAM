@@ -1,0 +1,94 @@
+[package]
+name = "immich-syncdesk"
+version = "0.1.0"
+description = "Cross-platform desktop sync client for Immich"
+authors = ["Immich SyncDesk"]
+edition = "2021"
+
+[lib]
+name = "immich_syncdesk_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png", "image-ico"] }
+tauri-plugin-opener = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-store = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-http = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-log = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json", "multipart", "stream", "rustls-tls"], default-features = false }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Database
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+# File watching
+notify = "6"
+notify-debouncer-full = "0.3"
+
+# Hashing
+sha1 = "0.10"
+blake3 = "1"
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+
+# Utility
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "5"
+anyhow = "1"
+thiserror = "1"
+async-trait = "0.1"
+futures = "0.3"
+tokio-util = { version = "0.7", features = ["full"] }
+regex = "1"
+walkdir = "2"
+glob = "0.3"
+mime_guess = "2"
+base64 = "0.22"
+rand = "0.8"
+
+# System info for device ID
+hostname = "0.4"
+
+# OS keychain for secure API key storage
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+
+# Move freed files to the OS trash/recycle bin (recoverable)
+trash = "5"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# macOS-specific
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# Windows-specific
+winreg = "0.52"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Linux-specific
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

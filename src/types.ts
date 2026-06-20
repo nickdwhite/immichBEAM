@@ -1,0 +1,135 @@
+// Types mirroring the Rust backend's serialized structs.
+
+export interface WatchedFolder {
+  path: string;
+  enabled: boolean;
+  album_id: string | null;
+}
+
+export interface AppConfig {
+  server_url: string;
+  allow_insecure: boolean;
+  folders: WatchedFolder[];
+  include_extensions: string[];
+  concurrency: number;
+  bandwidth_limit_kbps: number;
+  autostart: boolean;
+  device_id: string;
+  paused: boolean;
+  debug_logging: boolean;
+}
+
+export interface ConfigDto extends AppConfig {
+  has_api_key: boolean;
+}
+
+export interface ConnectionInfo {
+  reachable: boolean;
+  authenticated: boolean;
+  version: string | null;
+  user_email: string | null;
+  insecure: boolean;
+  message: string;
+}
+
+export type SyncState = "idle" | "syncing" | "paused" | "error" | "offline";
+
+export type IconKey =
+  | "disconnected"
+  | "insecure"
+  | "secure"
+  | "syncing"
+  | "paused";
+
+export interface SyncStatus {
+  state: SyncState;
+  icon: IconKey;
+  secure: boolean;
+  pending: number;
+  active: number;
+  uploaded_session: number;
+  failed_session: number;
+  message: string;
+}
+
+export type ItemStatus =
+  | "pending"
+  | "active"
+  | "success"
+  | "duplicate"
+  | "skipped"
+  | "unsupported"
+  | "failed";
+
+export interface QueueItem {
+  id: string;
+  path: string;
+  priority: number;
+  status: ItemStatus;
+  retries: number;
+  error: string | null;
+  size: number;
+}
+
+export interface HistoryItem {
+  id: string;
+  filename: string;
+  asset_id: string | null;
+  status: ItemStatus;
+  uploaded_at: number;
+}
+
+export interface Album {
+  id: string;
+  album_name: string;
+  asset_count: number;
+}
+
+export interface HistoryStats {
+  total: number;
+  success: number;
+  duplicate: number;
+  skipped: number;
+  failed: number;
+  last_uploaded_at: number | null;
+}
+
+export interface ProgressPayload {
+  id: string;
+  path: string;
+  sent: number;
+  total: number;
+  pct: number;
+}
+
+export interface FreeableItem {
+  path: string;
+  size: number;
+  mtime: number;
+  asset_id: string | null;
+}
+
+export interface FreeResult {
+  freed_count: number;
+  freed_bytes: number;
+  errors: string[];
+}
+
+export interface FreeableScan {
+  running: boolean;
+  done: boolean;
+  scanned: number;
+  total: number;
+  items: FreeableItem[];
+}
+
+export interface RepairReport {
+  requeued_active: number;
+  removed_missing: number;
+  resized: number;
+}
+
+export interface FolderInspect {
+  file_count: number;
+  total_bytes: number;
+}

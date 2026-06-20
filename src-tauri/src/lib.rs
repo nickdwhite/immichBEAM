@@ -1,0 +1,125 @@
+//! Immich SyncDesk — Tauri application entry point and setup.
+
+mod api;
+mod commands;
+mod config;
+mod db;
+mod keychain;
+mod sync;
+mod tray;
+
+use tauri::{Listener, Manager, WindowEvent};
+use tauri_plugin_autostart::MacosLauncher;
+
+use crate::config::AppConfig;
+use crate::db::Db;
+use crate::sync::engine::EVT_STATUS;
+use crate::sync::SyncEngine;
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .level(log::LevelFilter::Info)
+                .targets([
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                        file_name: Some("immich-syncdesk".to_string()),
+                    }),
+                ])
+                .max_file_size(5_000_000)
+                .build(),
+        )
+        .plugin(tauri_plugin_autostart::init(
+            MacosLauncher::LaunchAgent,
+            None::<Vec<&str>>,
+        ))
+        .setup(|app| {
+            let handle = app.handle().clone();
+
+            // Load persisted config and open the database.
+            let config = AppConfig::load().unwrap_or_default();
+            let db = Db::open_default().expect("failed to open database");
+
+            // Create and register the sync engine.
+            let engine = SyncEngine::new(handle.clone(), config, db);
+            app.manage(engine.clone());
+
+            // Build the system tray.
+            if let Err(e) = tray::build_tray(&handle) {
+                log::error!("failed to build tray: {e}");
+            }
+
+            // Keep the tray label in sync with engine status.
+            {
+                let handle = handle.clone();
+                app.listen(EVT_STATUS, move |event| {
+                    if let Ok(value) =
+                        serde_json::from_str::<serde_json::Value>(event.payload())
+                    {
+                        if let Some(icon) = value.get("icon").and_then(|s| s.as_str()) {
+                            tray::update_status_label(&handle, icon);
+                        }
+                    }
+                });
+            }
+
+            // Start the engine (watcher + worker loop).
+            let engine_start = engine.clone();
+            tauri::async_runtime::spawn(async move {
+                engine_start.start().await;
+            });
+
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            // Minimize to tray instead of quitting when the window is closed.
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
+        .invoke_handler(tauri::generate_handler![
+            commands::get_config,
+            commands::test_connection,
+            commands::save_server,
+            commands::save_config,
+            commands::add_folder,
+            commands::remove_folder,
+            commands::clear_api_key,
+            commands::get_status,
+            commands::default_extensions,
+            commands::get_log_path,
+            commands::read_log,
+            commands::get_queue,
+            commands::get_failed,
+            commands::get_history,
+            commands::pause_sync,
+            commands::resume_sync,
+            commands::retry_failed,
+            commands::retry_item,
+            commands::get_stats,
+            commands::rescan,
+            commands::repair_queue,
+            commands::clear_queue,
+            commands::inspect_folder,
+            commands::get_albums,
+            commands::create_album,
+            commands::start_freeable_scan,
+            commands::get_freeable_state,
+            commands::free_space,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running Immich SyncDesk");
+}
