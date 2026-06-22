@@ -7,6 +7,7 @@ mod db;
 mod keychain;
 mod sync;
 mod tray;
+mod updater;
 
 use tauri::{Listener, Manager, WindowEvent};
 use tauri_plugin_autostart::MacosLauncher;
@@ -19,14 +20,18 @@ use crate::sync::SyncEngine;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Must be the first plugin: if a second copy is launched, focus the
+        // existing window instead of starting another engine/watcher.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.unminimize();
+                let _ = w.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_fs::init())
-        .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_process::init())
         .plugin(
             tauri_plugin_log::Builder::new()
                 .level(log::LevelFilter::Info)
@@ -43,6 +48,9 @@ pub fn run() {
             MacosLauncher::LaunchAgent,
             None::<Vec<&str>>,
         ))
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .manage(updater::PendingUpdate::default())
         .setup(|app| {
             let handle = app.handle().clone();
 
@@ -67,7 +75,9 @@ pub fn run() {
                         serde_json::from_str::<serde_json::Value>(event.payload())
                     {
                         if let Some(icon) = value.get("icon").and_then(|s| s.as_str()) {
-                            tray::update_status_label(&handle, icon);
+                            let pending =
+                                value.get("pending").and_then(|p| p.as_i64()).unwrap_or(0);
+                            tray::update_status_label(&handle, icon, pending);
                         }
                     }
                 });
@@ -99,12 +109,16 @@ pub fn run() {
             commands::remove_folder,
             commands::clear_api_key,
             commands::get_status,
+            commands::get_connection_info,
+            commands::get_cert_fingerprint,
+            commands::forget_cert_pin,
             commands::default_extensions,
             commands::get_log_path,
             commands::read_log,
             commands::get_queue,
             commands::get_failed,
             commands::get_history,
+            commands::clear_history,
             commands::pause_sync,
             commands::resume_sync,
             commands::retry_failed,
@@ -119,6 +133,8 @@ pub fn run() {
             commands::start_freeable_scan,
             commands::get_freeable_state,
             commands::free_space,
+            updater::check_for_update,
+            updater::install_update,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Immich SyncDesk");

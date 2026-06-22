@@ -3,6 +3,7 @@ import { onProgress, onProgressDone } from "../lib/tauri";
 
 export interface ItemProgress {
   path: string;
+  phase: "hashing" | "uploading";
   sent: number;
   total: number;
   pct: number;
@@ -18,7 +19,13 @@ export function useProgress(): Record<string, ItemProgress> {
       if (mounted)
         setProgress((prev) => ({
           ...prev,
-          [p.id]: { path: p.path, sent: p.sent, total: p.total, pct: p.pct },
+          [p.id]: {
+            path: p.path,
+            phase: p.phase,
+            sent: p.sent,
+            total: p.total,
+            pct: p.pct,
+          },
         }));
     });
     const unDone = onProgressDone((id) => {

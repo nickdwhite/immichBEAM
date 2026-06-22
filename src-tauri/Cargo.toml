@@ -16,20 +16,18 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = ["tray-icon", "image-png", "image-ico"] }
 tauri-plugin-opener = "2"
 tauri-plugin-autostart = "2"
-tauri-plugin-store = "2"
 tauri-plugin-dialog = "2"
-tauri-plugin-fs = "2"
-tauri-plugin-http = "2"
 tauri-plugin-notification = "2"
-tauri-plugin-shell = "2"
 tauri-plugin-log = "2"
 tauri-plugin-updater = "2"
-tauri-plugin-process = "2"
+tauri-plugin-window-state = "2"
+tauri-plugin-single-instance = "2"
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 
-# HTTP client
+# HTTP client. `rustls-tls` also enables the TLS-info API (ClientBuilder::tls_info
+# + reqwest::tls::TlsInfo) we use to capture the peer certificate for pinning.
 reqwest = { version = "0.12", features = ["json", "multipart", "stream", "rustls-tls"], default-features = false }
 
 # Serialization
@@ -38,6 +36,8 @@ serde_json = "1"
 
 # Database
 rusqlite = { version = "0.31", features = ["bundled"] }
+r2d2 = "0.8"
+r2d2_sqlite = "0.24"
 
 # File watching
 notify = "6"
@@ -45,6 +45,7 @@ notify-debouncer-full = "0.3"
 
 # Hashing
 sha1 = "0.10"
+sha2 = "0.10"   # SHA-256 fingerprints of pinned certificates
 blake3 = "1"
 
 # Logging
@@ -75,6 +76,10 @@ keyring = { version = "3", features = ["apple-native", "windows-native", "sync-s
 
 # Move freed files to the OS trash/recycle bin (recoverable)
 trash = "5"
+
+[dev-dependencies]
+# `test-util` enables tokio's paused-clock tests (start_paused = true).
+tokio = { version = "1", features = ["full", "test-util"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # macOS-specific

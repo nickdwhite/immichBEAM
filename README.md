@@ -18,10 +18,20 @@ Built with **Tauri 2**, **React 19 + TypeScript**, and a **Rust** backend.
 - Durable upload queue that survives restarts, with retries + exponential backoff
   and auto-resume on reconnect.
 - Configurable concurrency and bandwidth throttling.
-- API key stored in the OS keychain (never written to disk in plain text).
-- Trust-on-first-use handling for self-signed certificates.
-- Dashboard: server settings, watched folders + file-type filters, sync settings,
-  live queue, upload history, and an error log with one-click retry.
+- Streaming uploads with live per-file and overall progress; only new/changed
+  files are processed (synced files are skipped via the hash cache).
+- API key stored in the OS keychain (read once per launch, cached in memory).
+- Optional "disable TLS verification" for self-signed servers (clearly labeled).
+- **Free Up Space**: trash local files already safely backed up (verified by
+  checksum), with a background scan and batched, silent OS-trash move.
+- **Dashboard** grouped into Activity (Overview / Queue / History / Errors),
+  Settings (Server / Folders / Sync), and Tools (Free Up Space / Diagnostics /
+  About): live queue, per-folder albums, file-type filters, queue repair/clear,
+  upload history, error log with retry, log viewer, and in-app updates.
+- First-run onboarding, toast feedback, light/dark/system theme, and a
+  keyboard-accessible UI.
+- In-app **auto-update** (Tauri updater) and CI that packages macOS, Windows,
+  and Linux installers (see `docs/`).
 
 ## Project layout
 

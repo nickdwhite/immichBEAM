@@ -29,6 +29,26 @@ export function LogViewer() {
     if (preRef.current) preRef.current.scrollTop = preRef.current.scrollHeight;
   }, [log]);
 
+  // WKWebView doesn't repaint off-screen content in a tall scroll container when
+  // the theme class flips on <html>. Force a repaint of the <pre> on theme
+  // changes, preserving scroll position.
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      const el = preRef.current;
+      if (!el) return;
+      const top = el.scrollTop;
+      el.style.display = "none";
+      void el.offsetHeight; // force reflow
+      el.style.display = "";
+      el.scrollTop = top;
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    return () => observer.disconnect();
+  }, []);
+
   const openFolder = async () => {
     try {
       const path = await api.getLogPath();
@@ -68,7 +88,7 @@ export function LogViewer() {
       </div>
       <pre
         ref={preRef}
-        className="h-72 overflow-auto rounded-lg border border-slate-200 bg-slate-950 p-3 font-mono text-[11px] leading-relaxed text-slate-200 dark:border-slate-800"
+        className="h-72 overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-3 font-mono text-[11px] leading-relaxed text-slate-800 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
       >
         {log || "No log output yet."}
       </pre>

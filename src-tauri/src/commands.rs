@@ -51,7 +51,10 @@ pub async fn test_connection(
             .map_err(map_err)?
             .unwrap_or_default(),
     };
-    let client = ImmichClient::new(&url, &key, allow_insecure).map_err(map_err)?;
+    // No pin here: this is a pre-save connectivity/auth check, so accept the
+    // cert (when insecure) rather than failing on a stale pin. The real pin is
+    // (re)captured by the engine after the settings are saved and applied.
+    let client = ImmichClient::new(&url, &key, allow_insecure, None).map_err(map_err)?;
     Ok(client.validate().await)
 }
 
@@ -71,7 +74,13 @@ pub async fn save_server(
         }
     }
     let mut config = engine.current_config().await;
-    config.server_url = url.trim().trim_end_matches('/').to_string();
+    let new_url = url.trim().trim_end_matches('/').to_string();
+    // A different server has a different certificate — drop any stale pin so a
+    // fresh one is captured on the next connect.
+    if new_url != config.server_url {
+        config.pinned_cert = None;
+    }
+    config.server_url = new_url;
     config.allow_insecure = allow_insecure;
     engine.apply_config(config).await;
     Ok(())
@@ -125,6 +134,38 @@ pub async fn get_status(engine: State<'_, SyncEngine>) -> CmdResult<SyncStatus> 
     Ok(engine.status().await)
 }
 
+/// Live connection status (server version, auth) using the cached client, so it
+/// never reads the keychain. Returns "Not configured" when no client exists.
+#[tauri::command]
+pub async fn get_connection_info(engine: State<'_, SyncEngine>) -> CmdResult<ConnectionInfo> {
+    match engine.client().await {
+        Some(client) => Ok(client.validate().await),
+        None => Ok(ConnectionInfo {
+            reachable: false,
+            authenticated: false,
+            version: None,
+            user_email: None,
+            insecure: false,
+            message: "Not configured".into(),
+        }),
+    }
+}
+
+/// SHA-256 fingerprint of the pinned server certificate (TOFU), or `None` if
+/// no certificate is currently pinned.
+#[tauri::command]
+pub async fn get_cert_fingerprint(engine: State<'_, SyncEngine>) -> CmdResult<Option<String>> {
+    Ok(engine.cert_fingerprint().await)
+}
+
+/// Forget the pinned certificate so the next connection trusts and pins a new
+/// one (used when the server's certificate legitimately changes).
+#[tauri::command]
+pub async fn forget_cert_pin(engine: State<'_, SyncEngine>) -> CmdResult<()> {
+    engine.forget_cert_pin().await;
+    Ok(())
+}
+
 /// The full Immich-supported extension list, for the "reset filter" action.
 #[tauri::command]
 pub fn default_extensions() -> Vec<String> {
@@ -156,9 +197,13 @@ pub fn read_log(app: AppHandle, lines: Option<usize>) -> CmdResult<String> {
 }
 
 #[tauri::command]
-pub async fn get_queue(engine: State<'_, SyncEngine>) -> CmdResult<Vec<QueueItem>> {
+pub async fn get_queue(
+    engine: State<'_, SyncEngine>,
+    limit: Option<u32>,
+) -> CmdResult<Vec<QueueItem>> {
+    let limit = limit.unwrap_or(500);
     engine
-        .with_db(|db| db.list_queue())
+        .with_db(|db| db.list_queue(limit))
         .await
         .map_err(map_err)
 }
@@ -175,11 +220,17 @@ pub async fn get_failed(engine: State<'_, SyncEngine>) -> CmdResult<Vec<QueueIte
 pub async fn get_history(
     engine: State<'_, SyncEngine>,
     limit: Option<u32>,
+    status: Option<String>,
 ) -> CmdResult<Vec<HistoryItem>> {
     engine
-        .with_db(|db| db.list_history(limit.unwrap_or(200)))
+        .with_db(|db| db.list_history(limit.unwrap_or(500), status.as_deref()))
         .await
         .map_err(map_err)
+}
+
+#[tauri::command]
+pub async fn clear_history(engine: State<'_, SyncEngine>) -> CmdResult<usize> {
+    Ok(engine.clear_history().await)
 }
 
 #[tauri::command]

@@ -30,11 +30,15 @@ export function ActivityBar({ status }: { status: SyncStatus }) {
         <span className="min-w-0 flex-1 truncate text-sm">
           {current ? (
             <>
-              <span className="font-medium">Uploading</span>{" "}
+              <span className="font-medium">
+                {current.phase === "hashing" ? "Hashing" : "Uploading"}
+              </span>{" "}
               <span title={current.path}>{basename(current.path)}</span>
               <span className="text-slate-500">
                 {" "}
-                — {current.pct}% · {fmtBytes(current.sent)}/{fmtBytes(current.total)}
+                — {current.pct}%
+                {current.phase === "uploading" &&
+                  ` · ${fmtBytes(current.sent)}/${fmtBytes(current.total)}`}
                 {others > 0 && ` (+${others} more)`}
               </span>
             </>

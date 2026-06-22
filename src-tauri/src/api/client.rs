@@ -21,6 +21,69 @@ pub type ProgressFn = Arc<dyn Fn(u64, u64) + Send + Sync>;
 /// Returns true to abort an in-flight upload (e.g. the user paused).
 pub type CancelFn = Arc<dyn Fn() -> bool + Send + Sync>;
 
+/// A classified API error, so the sync engine can decide retry behavior from
+/// the real HTTP status rather than matching on message text.
+#[derive(Debug)]
+pub enum ApiError {
+    /// Server returned a non-success HTTP status.
+    Status(u16),
+    /// Connection / timeout / DNS failure — retryable.
+    Transport(String),
+    /// Local IO or response-decode failure.
+    Other(String),
+}
+
+impl ApiError {
+    /// 401/403 — the API key is missing, wrong, or lacks permission.
+    pub fn is_auth(&self) -> bool {
+        matches!(self, ApiError::Status(401) | ApiError::Status(403))
+    }
+
+    /// A client error the server will never accept on retry (bad request,
+    /// payload too large, unsupported media). Excludes auth, timeout (408),
+    /// and rate-limit (429), which are retryable.
+    pub fn is_permanent(&self) -> bool {
+        match self {
+            ApiError::Status(s) => (400..500).contains(s) && !matches!(s, 401 | 403 | 408 | 429),
+            _ => false,
+        }
+    }
+}
+
+impl std::fmt::Display for ApiError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ApiError::Status(s) => write!(f, "HTTP {s}"),
+            ApiError::Transport(m) => write!(f, "network error: {m}"),
+            ApiError::Other(m) => write!(f, "{m}"),
+        }
+    }
+}
+
+impl std::error::Error for ApiError {}
+
+impl From<reqwest::Error> for ApiError {
+    fn from(e: reqwest::Error) -> Self {
+        if let Some(s) = e.status() {
+            ApiError::Status(s.as_u16())
+        } else if e.is_connect() || e.is_timeout() {
+            ApiError::Transport(e.to_string())
+        } else {
+            ApiError::Other(e.to_string())
+        }
+    }
+}
+
+/// Turn a non-success response into a typed `ApiError::Status`.
+fn status_checked(resp: reqwest::Response) -> std::result::Result<reqwest::Response, ApiError> {
+    let s = resp.status();
+    if s.is_success() {
+        Ok(resp)
+    } else {
+        Err(ApiError::Status(s.as_u16()))
+    }
+}
+
 /// HTTP client bound to a single Immich server + API key.
 #[derive(Clone)]
 pub struct ImmichClient {
@@ -31,24 +94,66 @@ pub struct ImmichClient {
 
 impl ImmichClient {
     /// Build a client. `base_url` may or may not have a trailing slash.
-    /// `allow_insecure` accepts self-signed certificates (trust-on-first-use).
-    pub fn new(base_url: &str, api_key: &str, allow_insecure: bool) -> Result<Self> {
+    ///
+    /// TLS trust is decided in three modes:
+    /// * `pinned_cert: Some(der)` — trust **only** that one certificate (TOFU
+    ///   pinning). Built-in roots are disabled and hostname checking is relaxed
+    ///   (self-signed homelab certs are usually issued to an IP), so a swapped
+    ///   certificate from an in-path attacker is rejected while the pinned one
+    ///   is accepted.
+    /// * `allow_insecure && pinned_cert == None` — accept any cert, but only so
+    ///   the leaf can be captured and pinned on first use (see
+    ///   `capture_peer_cert`). This window is closed as soon as a pin is stored.
+    /// * neither — normal CA validation.
+    pub fn new(
+        base_url: &str,
+        api_key: &str,
+        allow_insecure: bool,
+        pinned_cert: Option<Vec<u8>>,
+    ) -> Result<Self> {
         let base_url = base_url.trim_end_matches('/').to_string();
-        let http = Client::builder()
+        let mut builder = Client::builder()
             .user_agent(concat!("ImmichSyncDesk/", env!("CARGO_PKG_VERSION")))
-            .danger_accept_invalid_certs(allow_insecure)
+            // Expose the negotiated peer certificate (for TOFU capture).
+            .tls_info(true)
             .connect_timeout(Duration::from_secs(10))
             // No overall request timeout: large uploads can legitimately take a
             // long time. Stalls are bounded by the worker's per-item timeout and
             // pause-cancellation; connect failures still fail fast.
-            .timeout(Duration::from_secs(3600))
-            .build()
-            .context("failed to build HTTP client")?;
+            .timeout(Duration::from_secs(3600));
+
+        if let Some(der) = pinned_cert {
+            let cert = reqwest::Certificate::from_der(&der)
+                .context("pinned certificate is not valid DER")?;
+            builder = builder
+                .tls_built_in_root_certs(false)
+                .add_root_certificate(cert);
+            // Self-signed homelab certs are usually issued to an IP, which can't
+            // appear in a cert's hostname fields — so relax hostname checking
+            // only for IP-literal servers. For DNS names keep it on, so the cert
+            // must still match the host (defense-in-depth on top of the pin).
+            if host_is_ip(&base_url) {
+                builder = builder.danger_accept_invalid_hostnames(true);
+            }
+        } else if allow_insecure {
+            builder = builder.danger_accept_invalid_certs(true);
+        }
+
+        let http = builder.build().context("failed to build HTTP client")?;
         Ok(Self {
             base_url,
             api_key: api_key.to_string(),
             http,
         })
+    }
+
+    /// Fetch the server's leaf certificate (DER) from a fresh handshake, for
+    /// trust-on-first-use pinning. Returns `None` if TLS info is unavailable
+    /// (e.g. a plain-HTTP server, or the request failed).
+    pub async fn capture_peer_cert(&self) -> Option<Vec<u8>> {
+        let resp = self.http.get(self.url("/api/server/ping")).send().await.ok()?;
+        let info = resp.extensions().get::<reqwest::tls::TlsInfo>()?;
+        info.peer_certificate().map(|der| der.to_vec())
     }
 
     pub fn is_insecure(&self) -> bool {
@@ -144,7 +249,7 @@ impl ImmichClient {
     pub async fn bulk_upload_check(
         &self,
         items: Vec<BulkCheckItem>,
-    ) -> Result<Vec<BulkCheckResultItem>> {
+    ) -> std::result::Result<Vec<BulkCheckResultItem>, ApiError> {
         if items.is_empty() {
             return Ok(vec![]);
         }
@@ -155,9 +260,9 @@ impl ImmichClient {
             .header("x-api-key", &self.api_key)
             .json(&req)
             .send()
-            .await?
-            .error_for_status()?;
-        let body: BulkCheckResponse = resp.json().await?;
+            .await?;
+        let resp = status_checked(resp)?;
+        let body: BulkCheckResponse = resp.json().await.map_err(ApiError::from)?;
         Ok(body.results)
     }
 
@@ -174,15 +279,17 @@ impl ImmichClient {
         bandwidth: Arc<BandwidthLimiter>,
         on_progress: ProgressFn,
         cancel: CancelFn,
-    ) -> Result<AssetUploadResponse> {
+        live_photo_video_id: Option<&str>,
+        sidecar: Option<&Path>,
+    ) -> std::result::Result<AssetUploadResponse, ApiError> {
         let metadata = tokio::fs::metadata(path)
             .await
-            .with_context(|| format!("cannot stat {}", path.display()))?;
+            .map_err(|e| ApiError::Other(format!("cannot stat {}: {e}", path.display())))?;
         let total = metadata.len();
         let file_name = path
             .file_name()
             .and_then(|n| n.to_str())
-            .ok_or_else(|| anyhow!("invalid file name"))?
+            .ok_or_else(|| ApiError::Other("invalid file name".into()))?
             .to_string();
 
         let mime = mime_guess::from_path(path)
@@ -195,7 +302,9 @@ impl ImmichClient {
         .to_rfc3339();
 
         // Stream the file: throttle and report progress per chunk.
-        let file = tokio::fs::File::open(path).await?;
+        let file = tokio::fs::File::open(path)
+            .await
+            .map_err(|e| ApiError::Other(format!("open {}: {e}", path.display())))?;
         let sent = Arc::new(AtomicU64::new(0));
         let stream = ReaderStream::new(file).then(move |chunk| {
             let bandwidth = bandwidth.clone();
@@ -222,17 +331,39 @@ impl ImmichClient {
         let body = reqwest::Body::wrap_stream(stream);
         let part = multipart::Part::stream_with_length(body, total)
             .file_name(file_name.clone())
-            .mime_str(&mime)?;
+            .mime_str(&mime)
+            .map_err(ApiError::from)?;
 
         let device_asset_id = format!("{file_name}-{}", total);
 
-        let form = multipart::Form::new()
+        let mut form = multipart::Form::new()
             .text("deviceAssetId", device_asset_id)
             .text("deviceId", device_id.to_string())
             .text("fileCreatedAt", created.clone())
             .text("fileModifiedAt", created)
             .text("isFavorite", "false")
             .part("assetData", part);
+
+        // Link the paired video of a Live Photo.
+        if let Some(vid) = live_photo_video_id {
+            form = form.text("livePhotoVideoId", vid.to_string());
+        }
+
+        // Attach an XMP sidecar (metadata) if one was found next to the file.
+        if let Some(sc) = sidecar {
+            if let Ok(bytes) = tokio::fs::read(sc).await {
+                let sc_name = sc
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("sidecar.xmp")
+                    .to_string();
+                let sc_part = multipart::Part::bytes(bytes)
+                    .file_name(sc_name)
+                    .mime_str("application/xml")
+                    .map_err(ApiError::from)?;
+                form = form.part("sidecarData", sc_part);
+            }
+        }
 
         let resp = self
             .http
@@ -241,10 +372,9 @@ impl ImmichClient {
             .header("x-immich-checksum", sha1_hex)
             .multipart(form)
             .send()
-            .await?
-            .error_for_status()?;
-
-        Ok(resp.json().await?)
+            .await?;
+        let resp = status_checked(resp)?;
+        resp.json().await.map_err(ApiError::from)
     }
 
     /// `POST /api/albums` — create a new (empty) album.
@@ -277,8 +407,9 @@ impl ImmichClient {
         if asset_ids.is_empty() {
             return Ok(());
         }
+        let path = format!("/api/albums/{}/assets", encode_path_segment(album_id));
         self.http
-            .put(self.url(&format!("/api/albums/{album_id}/assets")))
+            .put(self.url(&path))
             .header("x-api-key", &self.api_key)
             .json(&serde_json::json!({ "ids": asset_ids }))
             .send()
@@ -291,4 +422,75 @@ impl ImmichClient {
 /// Encode raw SHA1 bytes as Base64 (for bulk-upload-check).
 pub fn sha1_to_base64(sha1_bytes: &[u8]) -> String {
     base64::engine::general_purpose::STANDARD.encode(sha1_bytes)
+}
+
+/// True if the host in `base_url` is an IP literal (v4 or v6). Used to decide
+/// whether to relax TLS hostname checking when pinning (IP certs can't carry a
+/// matching hostname). Unparseable URLs fall back to `true` (lenient), matching
+/// the prior behavior.
+fn host_is_ip(base_url: &str) -> bool {
+    match reqwest::Url::parse(base_url) {
+        Ok(u) => match u.host_str() {
+            // Strip IPv6 brackets, then try to parse as an IP address.
+            Some(h) => h
+                .trim_start_matches('[')
+                .trim_end_matches(']')
+                .parse::<std::net::IpAddr>()
+                .is_ok(),
+            None => true,
+        },
+        Err(_) => true,
+    }
+}
+
+/// Percent-encode a single URL path segment, keeping only RFC 3986 unreserved
+/// characters. Defense-in-depth for server-supplied ids placed into a path
+/// (a normal UUID passes through unchanged).
+fn encode_path_segment(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                out.push(b as char)
+            }
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn host_is_ip_detects_literals() {
+        assert!(host_is_ip("https://192.168.1.5:2283"));
+        assert!(host_is_ip("http://127.0.0.1"));
+        assert!(host_is_ip("https://[::1]:2283"));
+        assert!(!host_is_ip("https://immich.example.com"));
+        assert!(!host_is_ip("https://nas.local:2283"));
+    }
+
+    #[test]
+    fn encode_path_segment_passes_uuids_and_escapes_separators() {
+        let uuid = "3fa85f64-5717-4562-b3fc-2c963f66afa6";
+        assert_eq!(encode_path_segment(uuid), uuid);
+        // Path-breaking characters are escaped.
+        assert_eq!(encode_path_segment("a/b"), "a%2Fb");
+        assert_eq!(encode_path_segment("../x"), "..%2Fx");
+        assert_eq!(encode_path_segment("a b?c#d"), "a%20b%3Fc%23d");
+    }
+}
+
+/// Colon-separated, uppercase SHA-256 fingerprint of a DER certificate — the
+/// same format browsers/`openssl` show, for displaying a pinned cert to the user.
+pub fn cert_fingerprint(der: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(der);
+    digest
+        .iter()
+        .map(|b| format!("{b:02X}"))
+        .collect::<Vec<_>>()
+        .join(":")
 }

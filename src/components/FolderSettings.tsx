@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { FolderPlus, Loader2, Trash2, TriangleAlert } from "lucide-react";
 import { api } from "../lib/tauri";
 import { fmtBytes } from "../lib/format";
+import { useToast } from "./Toast";
 import type { Album, ConfigDto, FolderInspect } from "../types";
 
 const BIG_FILES = 1000;
@@ -23,6 +24,23 @@ export function FolderSettings({
   const [pending, setPending] = useState<{ path: string; info: FolderInspect } | null>(
     null,
   );
+  const [stats, setStats] = useState<Record<string, FolderInspect>>({});
+  const toast = useToast();
+
+  // Lazily compute per-folder media count + size in the background.
+  useEffect(() => {
+    let active = true;
+    config.folders.forEach((f) => {
+      api
+        .inspectFolder(f.path)
+        .then((info) => active && setStats((s) => ({ ...s, [f.path]: info })))
+        .catch(() => {});
+    });
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [config.folders.map((f) => f.path).join("|")]);
 
   // Albums are only available once the server is configured.
   useEffect(() => {
@@ -36,6 +54,9 @@ export function FolderSettings({
     try {
       await api.addFolder(path);
       onSaved();
+      toast.success("Folder added — scanning for media");
+    } catch (e) {
+      toast.error(`Couldn't add folder: ${e}`);
     } finally {
       setBusy(false);
     }
@@ -71,6 +92,7 @@ export function FolderSettings({
     try {
       await api.removeFolder(path);
       onSaved();
+      toast.info("Folder removed");
     } finally {
       setBusy(false);
     }
@@ -114,8 +136,9 @@ export function FolderSettings({
       const created = await api.createAlbum(name);
       setAlbums((prev) => [...prev, created]);
       setNewAlbum("");
+      toast.success(`Album “${name}” created`);
     } catch (e) {
-      console.error("create album failed", e);
+      toast.error(`Couldn't create album: ${e}`);
     } finally {
       setBusy(false);
     }
@@ -130,6 +153,7 @@ export function FolderSettings({
     try {
       await api.saveConfig({ ...config, include_extensions: exts });
       onSaved();
+      toast.success("File-type filter saved");
     } finally {
       setBusy(false);
     }
@@ -142,6 +166,7 @@ export function FolderSettings({
       setExtInput(defaults.join(", "));
       await api.saveConfig({ ...config, include_extensions: defaults });
       onSaved();
+      toast.success("Filter reset to Immich defaults");
     } finally {
       setBusy(false);
     }
@@ -214,14 +239,21 @@ export function FolderSettings({
                   className="shrink-0 rounded border-slate-300 text-brand-600"
                   title={f.enabled ? "Watching — click to pause" : "Paused — click to watch"}
                 />
-                <span
-                  className={`min-w-0 flex-1 truncate font-mono text-xs ${
-                    f.enabled ? "" : "text-slate-400 line-through"
-                  }`}
-                  title={f.path}
-                >
-                  {f.path}
-                </span>
+                <div className="min-w-0 flex-1">
+                  <div
+                    className={`truncate font-mono text-xs ${
+                      f.enabled ? "" : "text-slate-400 line-through"
+                    }`}
+                    title={f.path}
+                  >
+                    {f.path}
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    {stats[f.path]
+                      ? `${stats[f.path].file_count.toLocaleString()} files · ${fmtBytes(stats[f.path].total_bytes)}`
+                      : "…"}
+                  </div>
+                </div>
                 <select
                   value={f.album_id ?? ""}
                   onChange={(e) => setAlbum(f.path, e.target.value)}
@@ -283,26 +315,24 @@ export function FolderSettings({
           rows={3}
           className="w-full rounded-lg border-slate-300 font-mono text-xs dark:border-slate-700 dark:bg-slate-800"
         />
-        <div className="mt-2 flex items-center justify-between">
-          <p className="text-xs text-slate-400">
-            Comma- or space-separated extensions. Leave blank to allow all files.
-          </p>
-          <div className="flex gap-2">
-            <button
-              onClick={resetExtensions}
-              disabled={busy}
-              className="rounded-lg border border-slate-300 px-3 py-1 text-sm hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
-            >
-              Reset to Immich defaults
-            </button>
-            <button
-              onClick={saveExtensions}
-              disabled={busy}
-              className="rounded-lg border border-slate-300 px-3 py-1 text-sm hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
-            >
-              Save filter
-            </button>
-          </div>
+        <p className="mt-1.5 text-xs text-slate-400">
+          Comma- or space-separated extensions. Leave blank to allow all files.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            onClick={saveExtensions}
+            disabled={busy}
+            className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+          >
+            Save filter
+          </button>
+          <button
+            onClick={resetExtensions}
+            disabled={busy}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
+          >
+            Reset to Immich defaults
+          </button>
         </div>
       </div>
     </div>

@@ -32,9 +32,17 @@ pub struct AppConfig {
     #[serde(default)]
     pub server_url: String,
 
-    /// Whether the user has accepted a self-signed certificate (TOFU).
+    /// When true, the app trusts a self-signed/invalid server cert. On the first
+    /// successful HTTPS connect it captures and pins that exact certificate
+    /// (`pinned_cert`); afterwards only that certificate is accepted (TOFU),
+    /// so a later in-path attacker presenting a different cert is rejected.
     #[serde(default)]
     pub allow_insecure: bool,
+
+    /// Base64-encoded DER of the pinned server certificate (trust-on-first-use).
+    /// Set automatically; cleared to re-trust a new cert. Never a secret.
+    #[serde(default)]
+    pub pinned_cert: Option<String>,
 
     #[serde(default)]
     pub folders: Vec<WatchedFolder>,
@@ -66,6 +74,10 @@ pub struct AppConfig {
     /// Verbose per-file debug logging.
     #[serde(default)]
     pub debug_logging: bool,
+
+    /// Show desktop notifications (e.g. on permanent upload failures).
+    #[serde(default = "default_true")]
+    pub notifications_enabled: bool,
 }
 
 /// The full set of asset extensions Immich accepts (images + videos), mirroring
@@ -98,6 +110,7 @@ impl Default for AppConfig {
         Self {
             server_url: String::new(),
             allow_insecure: false,
+            pinned_cert: None,
             folders: Vec::new(),
             include_extensions: default_include(),
             concurrency: default_concurrency(),
@@ -106,6 +119,7 @@ impl Default for AppConfig {
             device_id: generate_device_id(),
             paused: false,
             debug_logging: false,
+            notifications_enabled: true,
         }
     }
 }

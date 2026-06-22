@@ -18,10 +18,20 @@ pub struct FileHash {
 
 /// Stream a file through SHA1 without loading it fully into memory.
 pub async fn hash_file(path: &Path) -> Result<FileHash> {
+    hash_file_with_progress(path, |_, _| {}).await
+}
+
+/// Like `hash_file`, but invokes `on_progress(bytes_hashed, total)` as it reads,
+/// so callers can show progress while hashing large files.
+pub async fn hash_file_with_progress(
+    path: &Path,
+    mut on_progress: impl FnMut(u64, u64),
+) -> Result<FileHash> {
     let meta = tokio::fs::metadata(path)
         .await
         .with_context(|| format!("stat {}", path.display()))?;
     let size = meta.len() as i64;
+    let total = meta.len();
     let mtime = meta
         .modified()
         .ok()
@@ -34,12 +44,15 @@ pub async fn hash_file(path: &Path) -> Result<FileHash> {
         .with_context(|| format!("open {}", path.display()))?;
     let mut hasher = Sha1::new();
     let mut buf = vec![0u8; 1024 * 1024];
+    let mut hashed = 0u64;
     loop {
         let n = file.read(&mut buf).await?;
         if n == 0 {
             break;
         }
         hasher.update(&buf[..n]);
+        hashed += n as u64;
+        on_progress(hashed, total);
     }
     let digest = hasher.finalize();
     Ok(FileHash {

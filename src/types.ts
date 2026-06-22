@@ -17,6 +17,7 @@ export interface AppConfig {
   device_id: string;
   paused: boolean;
   debug_logging: boolean;
+  notifications_enabled: boolean;
 }
 
 export interface ConfigDto extends AppConfig {
@@ -77,6 +78,7 @@ export interface HistoryItem {
   asset_id: string | null;
   status: ItemStatus;
   uploaded_at: number;
+  reason: string | null;
 }
 
 export interface Album {
@@ -97,6 +99,7 @@ export interface HistoryStats {
 export interface ProgressPayload {
   id: string;
   path: string;
+  phase: "hashing" | "uploading";
   sent: number;
   total: number;
   pct: number;
@@ -132,4 +135,11 @@ export interface RepairReport {
 export interface FolderInspect {
   file_count: number;
   total_bytes: number;
+}
+
+export interface UpdateInfo {
+  available: boolean;
+  version: string | null;
+  current_version: string | null;
+  notes: string | null;
 }

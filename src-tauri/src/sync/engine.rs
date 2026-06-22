@@ -1,7 +1,7 @@
 //! The sync engine: watches folders, hashes files, deduplicates against the
 //! server, and uploads with bounded concurrency, backoff, and bandwidth limits.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -14,12 +14,17 @@ use uuid::Uuid;
 use crate::api::{sha1_to_base64, BulkCheckItem, ImmichClient};
 use crate::config::AppConfig;
 use crate::db::{status, Db};
-use crate::sync::hasher::hash_file;
+use crate::sync::hasher::{hash_file, hash_file_with_progress};
 use crate::sync::queue::{BandwidthLimiter, SyncState, SyncStatus};
 use crate::sync::watcher::{scan_folder, FileEvent, FolderWatcher};
 
 /// Max upload attempts before an item is marked dead.
 const MAX_RETRIES: i64 = 5;
+/// Max asset ids sent in one album-add request.
+const ALBUM_BATCH: u32 = 250;
+/// Flush queued album-adds once this many have accumulated (the rest flush when
+/// the queue goes idle).
+const ALBUM_FLUSH_THRESHOLD: i64 = 50;
 /// Event name used to push status to the frontend.
 pub const EVT_STATUS: &str = "sync://status";
 pub const EVT_QUEUE: &str = "sync://queue-updated";
@@ -28,11 +33,12 @@ pub const EVT_PROGRESS: &str = "sync://progress";
 pub const EVT_PROGRESS_DONE: &str = "sync://progress-done";
 pub const EVT_FREEABLE: &str = "freeable://updated";
 
-/// Per-file upload progress pushed to the UI.
+/// Per-file progress pushed to the UI. `phase` is "hashing" or "uploading".
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ProgressPayload {
     pub id: String,
     pub path: String,
+    pub phase: String,
     pub sent: u64,
     pub total: u64,
     pub pct: u64,
@@ -41,7 +47,8 @@ pub struct ProgressPayload {
 struct Inner {
     app: AppHandle,
     config: Mutex<AppConfig>,
-    db: Mutex<Db>,
+    // The r2d2 pool (WAL + busy_timeout) handles concurrent access, so no mutex.
+    db: Db,
     client: Mutex<Option<ImmichClient>>,
     bandwidth: Arc<BandwidthLimiter>,
     watcher: Mutex<Option<FolderWatcher>>,
@@ -52,6 +59,8 @@ struct Inner {
     uploaded_session: AtomicU64,
     failed_session: AtomicU64,
     debug: AtomicBool,
+    /// Whether desktop notifications are enabled.
+    notifications: AtomicBool,
     /// API key cached in memory so the OS keychain is read only once per launch.
     api_key: Mutex<Option<String>>,
     /// Unix-millis until which the dispatcher should back off after errors.
@@ -60,6 +69,8 @@ struct Inner {
     backoff_secs: AtomicU64,
     /// State of a background free-up-space scan.
     freeable: Mutex<crate::sync::cleanup::FreeableScan>,
+    /// Serializes album-add flushes so only one runs at a time.
+    album_flush: Mutex<()>,
 }
 
 /// Cheaply-cloneable handle to the running engine.
@@ -73,13 +84,14 @@ impl SyncEngine {
         let bandwidth = BandwidthLimiter::new(config.bandwidth_limit_kbps);
         let paused = config.paused;
         let debug = config.debug_logging;
+        let notifications = config.notifications_enabled;
         // Read the keychain exactly once at startup, then cache in memory.
         let api_key = crate::keychain::get_api_key().ok().flatten();
         let client = build_client(&config, api_key.as_deref());
         let inner = Arc::new(Inner {
             app,
             config: Mutex::new(config),
-            db: Mutex::new(db),
+            db,
             client: Mutex::new(client),
             bandwidth,
             watcher: Mutex::new(None),
@@ -90,10 +102,12 @@ impl SyncEngine {
             uploaded_session: AtomicU64::new(0),
             failed_session: AtomicU64::new(0),
             debug: AtomicBool::new(debug),
+            notifications: AtomicBool::new(notifications),
             api_key: Mutex::new(api_key),
             cooldown_until: AtomicU64::new(0),
             backoff_secs: AtomicU64::new(0),
             freeable: Mutex::new(Default::default()),
+            album_flush: Mutex::new(()),
         });
         Self { inner }
     }
@@ -104,13 +118,15 @@ impl SyncEngine {
             return; // already running
         }
         {
-            let db = self.inner.db.lock().await;
+            let db = &self.inner.db;
             let _ = db.requeue_active();
         }
 
         let (tx, rx) = mpsc::unbounded_channel::<FileEvent>();
         self.start_watcher(tx.clone()).await;
         self.spawn_ingest(rx);
+        // Pin the server cert (TOFU) before the worker starts uploading.
+        self.ensure_cert_pinned().await;
         self.scan_all().await;
 
         let folders = self.enabled_folders().await.len();
@@ -159,13 +175,17 @@ impl SyncEngine {
                 if !matched {
                     continue;
                 }
+                if !extension_content_ok(&ev.path) {
+                    engine.record_content_skip(&ev.path).await;
+                    continue;
+                }
                 let path = ev.path.to_string_lossy().to_string();
                 let meta = std::fs::metadata(&ev.path).ok();
                 let size = meta.as_ref().map(|m| m.len() as i64).unwrap_or(0);
                 let mtime = file_mtime(meta.as_ref());
                 let id = Uuid::new_v4().to_string();
                 let inserted = {
-                    let db = engine.inner.db.lock().await;
+                    let db = &engine.inner.db;
                     if db.cached_hash(&path, size, mtime).ok().flatten().is_some() {
                         false // already synced and unchanged
                     } else {
@@ -182,30 +202,72 @@ impl SyncEngine {
     /// Initial scan of all enabled folders.
     pub async fn scan_all(&self) {
         let folders = self.enabled_folders().await;
+        let (mut queued, mut already, mut filtered, mut content_skipped) = (0, 0, 0, 0);
         for folder in folders {
-            let files = scan_folder(&folder);
+            // Walk the tree off the async runtime so we don't block a worker.
+            let files = tokio::task::spawn_blocking(move || scan_folder(&folder))
+                .await
+                .unwrap_or_default();
             for path in files {
                 let matched = {
                     let cfg = self.inner.config.lock().await;
                     cfg.matches_filter(&path)
                 };
                 if !matched {
+                    filtered += 1;
+                    continue;
+                }
+                if !extension_content_ok(&path) {
+                    content_skipped += 1;
+                    self.record_content_skip(&path).await;
                     continue;
                 }
                 let p = path.to_string_lossy().to_string();
                 let meta = std::fs::metadata(&path).ok();
                 let size = meta.as_ref().map(|m| m.len() as i64).unwrap_or(0);
                 let mtime = file_mtime(meta.as_ref());
-                let db = self.inner.db.lock().await;
+                let db = &self.inner.db;
                 // Skip files already confirmed synced and unchanged.
                 if db.cached_hash(&p, size, mtime).ok().flatten().is_some() {
+                    already += 1;
                     continue;
                 }
                 let id = Uuid::new_v4().to_string();
                 let _ = db.enqueue(&id, &p, 0, size);
+                queued += 1;
             }
         }
+        log::info!(
+            "scan complete: {queued} queued, {already} already synced, \
+             {filtered} non-matching, {content_skipped} skipped by content check"
+        );
         self.emit(EVT_QUEUE, &());
+        if content_skipped > 0 {
+            self.emit(EVT_HISTORY, &());
+        }
+    }
+
+    /// Record a content-check skip in the history (keyed by path so repeated
+    /// scans don't create duplicate rows), with a human-readable reason.
+    async fn record_content_skip(&self, path: &Path) {
+        let p = path.to_string_lossy().to_string();
+        let filename = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(&p)
+            .to_string();
+        let ext = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let reason = format!(
+            "Skipped: .{ext} extension is a media type, but the file's contents \
+             aren't (looks like text/source, e.g. TypeScript)"
+        );
+        let db = &self.inner.db;
+        let _ = db.add_history(&p, &filename, None, status::SKIPPED, Some(reason.as_str()));
+        self.log_debug(&format!("content check skipped: {p}"));
     }
 
     /// The dispatcher loop. Keeps up to `concurrency` uploads in flight
@@ -253,13 +315,17 @@ impl SyncEngine {
                 };
 
                 let item = {
-                    let db = engine.inner.db.lock().await;
+                    let db = &engine.inner.db;
                     db.claim_pending(1).unwrap_or_default().into_iter().next()
                 };
                 let Some(item) = item else {
                     drop(permit);
                     if in_flight == 0 {
                         engine.set_state(SyncState::Idle).await;
+                        // Nothing left to upload: flush any queued album-adds
+                        // (also drains leftovers from a previous run).
+                        let e = engine.clone();
+                        tokio::spawn(async move { e.flush_albums().await });
                     }
                     tokio::time::sleep(Duration::from_secs(1)).await;
                     continue;
@@ -282,6 +348,9 @@ impl SyncEngine {
                             e.note_error();
                         }
                     }
+                    // Clear any lingering progress entry (hashing or upload) for
+                    // this item, whatever the outcome.
+                    e.emit(EVT_PROGRESS_DONE, &id);
                     e.emit(EVT_QUEUE, &());
                     e.emit(EVT_HISTORY, &());
                     e.push_status().await;
@@ -289,6 +358,60 @@ impl SyncEngine {
                 });
             }
         });
+    }
+
+    /// Upload a companion file (e.g. a Live Photo's video) standalone and
+    /// return its server asset id. Caches it as synced and records history.
+    async fn upload_companion(
+        &self,
+        client: &ImmichClient,
+        path: &Path,
+        device_id: &str,
+    ) -> Option<String> {
+        let fh = hash_file(path).await.ok()?;
+        let bandwidth = self.inner.bandwidth.clone();
+        let noop: crate::api::ProgressFn = Arc::new(|_, _| {});
+        let engine = self.clone();
+        let cancel: crate::api::CancelFn =
+            Arc::new(move || engine.inner.paused.load(Ordering::Relaxed));
+        match client
+            .upload_asset(path, &fh.sha1_hex, device_id, bandwidth, noop, cancel, None, None)
+            .await
+        {
+            Ok(resp) => {
+                let p = path.to_string_lossy().to_string();
+                let fname = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or(&p)
+                    .to_string();
+                let db = &self.inner.db;
+                let _ = db.put_hash(&p, &fh.sha1_hex, fh.size, fh.mtime);
+                let _ = db.add_history(
+                    &p,
+                    &fname,
+                    Some(&resp.id),
+                    status::SUCCESS,
+                    Some("Live Photo video"),
+                );
+                Some(resp.id)
+            }
+            Err(e) => {
+                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("video");
+                log::warn!("Live Photo video upload failed for {name}: {e}");
+                None
+            }
+        }
+    }
+
+    /// True if `path` is already confirmed synced (in the hash cache, unchanged).
+    async fn is_synced(&self, path: &Path) -> bool {
+        let p = path.to_string_lossy().to_string();
+        let meta = std::fs::metadata(path).ok();
+        let size = meta.as_ref().map(|m| m.len() as i64).unwrap_or(0);
+        let mtime = file_mtime(meta.as_ref());
+        self.with_db(|db| db.cached_hash(&p, size, mtime).ok().flatten().is_some())
+            .await
     }
 
     /// Process a single queue item end-to-end.
@@ -302,16 +425,45 @@ impl SyncEngine {
 
         // File may have been deleted between enqueue and now.
         if !path.exists() {
-            let db = self.inner.db.lock().await;
-            let _ = db.add_history(&item.id, &filename, None, status::SKIPPED);
+            let db = &self.inner.db;
+            let _ = db.add_history(
+                &item.id,
+                &filename,
+                None,
+                status::SKIPPED,
+                Some("File no longer exists on disk"),
+            );
             let _ = db.remove_queue_item(&item.id);
             return Ok(());
         }
 
+        // Live Photo: if this is the video half and its still is still pending
+        // upload, the still will upload + link this video — defer it here. If
+        // the still is already synced, fall through (the video uploads normally
+        // and will dedupe if it was already sent as the still's companion).
+        if let Some(still) = paired_live_still(&path) {
+            if !self.is_synced(&still).await {
+                log::info!("Live Photo: deferring {filename} to its still");
+                let db = &self.inner.db;
+                let _ = db.add_history(
+                    &item.path,
+                    &filename,
+                    None,
+                    status::SKIPPED,
+                    Some("Part of a Live Photo — uploaded with its still"),
+                );
+                let _ = db.remove_queue_item(&item.id);
+                return Ok(());
+            }
+        }
+
         self.log_debug(&format!("processing {filename}"));
 
-        // 1. Hash the file.
-        let fh = match hash_file(&path).await {
+        // 1. Hash the file, reporting progress (large files take a while).
+        let hash_progress = self.progress_callback(&item.id, &item.path, "hashing");
+        let fh = match hash_file_with_progress(&path, |done, total| hash_progress(done, total))
+            .await
+        {
             Ok(fh) => fh,
             Err(e) => return self.handle_failure(&item, &filename, &e.to_string()).await,
         };
@@ -341,7 +493,7 @@ impl SyncEngine {
             Ok(r) => r,
             Err(_) => {
                 log::warn!("duplicate-check timed out for {filename}");
-                let db = self.inner.db.lock().await;
+                let db = &self.inner.db;
                 let _ = db.set_status(&item.id, status::PENDING);
                 return Err(ProcessError::Network);
             }
@@ -352,7 +504,7 @@ impl SyncEngine {
                     if r.action == "reject" {
                         let is_duplicate = r.asset_id.is_some()
                             || r.reason.as_deref() == Some("duplicate");
-                        let db = self.inner.db.lock().await;
+                        let db = &self.inner.db;
                         if is_duplicate {
                             log::info!("duplicate (already on server): {filename}");
                             let _ = db.add_history(
@@ -360,17 +512,20 @@ impl SyncEngine {
                                 &filename,
                                 r.asset_id.as_deref(),
                                 status::DUPLICATE,
+                                Some("Already on the server"),
                             );
                         } else {
                             // e.g. "unsupported-format": this server can't ingest it.
                             let reason =
                                 r.reason.clone().unwrap_or_else(|| "rejected".into());
                             log::warn!("server rejected {filename}: {reason}");
+                            let unsupported_reason = format!("Server rejected: {reason}");
                             let _ = db.add_history(
                                 &item.id,
                                 &filename,
                                 None,
                                 status::UNSUPPORTED,
+                                Some(unsupported_reason.as_str()),
                             );
                         }
                         // Either outcome is final — cache so scans skip it later.
@@ -381,28 +536,47 @@ impl SyncEngine {
                 }
             }
             Err(e) => {
-                let msg = e.to_string();
-                log::warn!("duplicate-check failed for {filename}: {msg}");
-                if is_auth_error(&msg) {
+                log::warn!("duplicate-check failed for {filename}: {e}");
+                if e.is_auth() {
                     *self.inner.last_error.lock().await =
                         Some("Authentication failed — check your API key".into());
                 }
-                let db = self.inner.db.lock().await;
+                let db = &self.inner.db;
                 let _ = db.set_status(&item.id, status::PENDING);
                 return Err(ProcessError::Network);
             }
         }
 
-        // 3. Streaming, bandwidth-limited upload with progress events.
+        // 3. Live Photo: upload the paired video first so we can link it.
+        let live_video_id: Option<String> = match paired_live_video(&path) {
+            Some(video) => {
+                self.log_debug(&format!("Live Photo: uploading paired video for {filename}"));
+                self.upload_companion(&client, &video, &device_id).await
+            }
+            None => None,
+        };
+        // XMP sidecar to attach, if present next to the file.
+        let sidecar = find_sidecar(&path);
+
+        // 4. Streaming, bandwidth-limited upload with progress events.
         log::info!("uploading {filename} ({} bytes)", fh.size);
-        let progress = self.progress_callback(&item.id, &item.path);
+        let progress = self.progress_callback(&item.id, &item.path, "uploading");
         let bandwidth = self.inner.bandwidth.clone();
         let cancel: crate::api::CancelFn = {
             let engine = self.clone();
             Arc::new(move || engine.inner.paused.load(Ordering::Relaxed))
         };
         let result = client
-            .upload_asset(&path, &fh.sha1_hex, &device_id, bandwidth, progress, cancel)
+            .upload_asset(
+                &path,
+                &fh.sha1_hex,
+                &device_id,
+                bandwidth,
+                progress,
+                cancel,
+                live_video_id.as_deref(),
+                sidecar.as_deref(),
+            )
             .await;
         match result {
             Ok(resp) => {
@@ -413,13 +587,20 @@ impl SyncEngine {
                 };
                 log::info!("uploaded {filename} -> {st} (asset {})", resp.id);
                 self.inner.uploaded_session.fetch_add(1, Ordering::Relaxed);
-                // Add to the watched folder's album, if one is configured.
+                // Queue the album membership; it's flushed in batched PUTs once
+                // enough accumulate or the queue goes idle (fewer round-trips).
                 if let Some(album_id) = self.album_for_path(&item.path).await {
-                    self.log_debug(&format!("adding {filename} to album {album_id}"));
-                    let _ = client.add_to_album(&album_id, &[resp.id.clone()]).await;
+                    let _ = self.with_db(|db| db.queue_album_add(&resp.id, &album_id)).await;
+                    let total = self
+                        .with_db(|db| db.pending_album_total().unwrap_or(0))
+                        .await;
+                    if total >= ALBUM_FLUSH_THRESHOLD {
+                        let e = self.clone();
+                        tokio::spawn(async move { e.flush_albums().await });
+                    }
                 }
-                let db = self.inner.db.lock().await;
-                let _ = db.add_history(&item.id, &filename, Some(&resp.id), st);
+                let db = &self.inner.db;
+                let _ = db.add_history(&item.id, &filename, Some(&resp.id), st, None);
                 // Mark synced so future scans skip this file entirely.
                 let _ = db.put_hash(&item.path, &fh.sha1_hex, fh.size, fh.mtime);
                 let _ = db.remove_queue_item(&item.id);
@@ -432,30 +613,28 @@ impl SyncEngine {
                 // is not a real failure and must not consume a retry.
                 if self.inner.paused.load(Ordering::Relaxed) {
                     log::info!("upload paused, requeued: {filename}");
-                    let db = self.inner.db.lock().await;
+                    let db = &self.inner.db;
                     let _ = db.set_status(&item.id, status::PENDING);
                     return Err(ProcessError::Paused);
                 }
 
-                let msg = e.to_string();
-
                 // Permanent, file-specific errors: count toward retries and
                 // eventually give up (the server will never accept this file).
-                if is_permanent_error(&msg) {
-                    return self.handle_failure(&item, &filename, &msg).await;
+                if e.is_permanent() {
+                    return self.handle_failure(&item, &filename, &e.to_string()).await;
                 }
 
                 // Retryable (network / 5xx / auth): requeue WITHOUT consuming a
                 // retry, so transient outages auto-resume. The dispatcher backs
                 // off via note_error().
-                let friendly = if is_auth_error(&msg) {
+                let friendly = if e.is_auth() {
                     "Authentication failed — check your API key".to_string()
                 } else {
-                    format!("{filename}: {msg}")
+                    format!("{filename}: {e}")
                 };
-                log::warn!("upload retryable error for {filename}: {msg}");
+                log::warn!("upload retryable error for {filename}: {e}");
                 *self.inner.last_error.lock().await = Some(friendly);
-                let db = self.inner.db.lock().await;
+                let db = &self.inner.db;
                 let _ = db.set_status(&item.id, status::PENDING);
                 Err(ProcessError::Network)
             }
@@ -472,7 +651,11 @@ impl SyncEngine {
             .with_db(|db| db.requeue_active().unwrap_or(0))
             .await;
 
-        let items = self.with_db(|db| db.list_queue()).await.unwrap_or_default();
+        // Repair must consider every queued item, not just a UI page.
+        let items = self
+            .with_db(|db| db.list_queue(u32::MAX))
+            .await
+            .unwrap_or_default();
         for item in items {
             let path = PathBuf::from(&item.path);
             if !path.exists() {
@@ -482,7 +665,13 @@ impl SyncEngine {
                     .unwrap_or(&item.path)
                     .to_string();
                 self.with_db(|db| {
-                    let _ = db.add_history(&item.id, &filename, None, status::SKIPPED);
+                    let _ = db.add_history(
+                        &item.id,
+                        &filename,
+                        None,
+                        status::SKIPPED,
+                        Some("File no longer exists on disk"),
+                    );
                     let _ = db.remove_queue_item(&item.id);
                 })
                 .await;
@@ -528,7 +717,10 @@ impl SyncEngine {
         let folder = PathBuf::from(path);
         let cfg = self.inner.config.lock().await.clone();
         let mut info = FolderInspect::default();
-        for file in scan_folder(&folder) {
+        let files = tokio::task::spawn_blocking(move || scan_folder(&folder))
+            .await
+            .unwrap_or_default();
+        for file in files {
             if !cfg.matches_filter(&file) {
                 continue;
             }
@@ -577,13 +769,12 @@ impl SyncEngine {
     ) -> Result<(), ProcessError> {
         log::warn!("upload failed for {filename}: {msg}");
         *self.inner.last_error.lock().await = Some(format!("{filename}: {msg}"));
-        let db = self.inner.db.lock().await;
+        let db = &self.inner.db;
         let retries = db.mark_failed(&item.id, msg).unwrap_or(MAX_RETRIES);
         if retries >= MAX_RETRIES {
             let _ = db.mark_dead(&item.id, msg);
-            let _ = db.add_history(&item.id, filename, None, status::FAILED);
+            let _ = db.add_history(&item.id, filename, None, status::FAILED, Some(msg));
             self.inner.failed_session.fetch_add(1, Ordering::Relaxed);
-            drop(db);
             self.notify_failure(filename);
         }
         Err(ProcessError::Upload)
@@ -591,6 +782,9 @@ impl SyncEngine {
 
     /// Show a desktop notification for a permanently-failed upload.
     fn notify_failure(&self, filename: &str) {
+        if !self.inner.notifications.load(Ordering::Relaxed) {
+            return;
+        }
         use tauri_plugin_notification::NotificationExt;
         let _ = self
             .inner
@@ -603,7 +797,12 @@ impl SyncEngine {
     }
 
     /// Build a throttled progress callback bound to this queue item.
-    fn progress_callback(&self, id: &str, path: &str) -> crate::api::ProgressFn {
+    fn progress_callback(
+        &self,
+        id: &str,
+        path: &str,
+        phase: &'static str,
+    ) -> crate::api::ProgressFn {
         let app = self.inner.app.clone();
         let id = id.to_string();
         let path = path.to_string();
@@ -617,6 +816,7 @@ impl SyncEngine {
                     ProgressPayload {
                         id: id.clone(),
                         path: path.clone(),
+                        phase: phase.to_string(),
                         sent,
                         total,
                         pct,
@@ -635,6 +835,49 @@ impl SyncEngine {
             .filter(|f| f.enabled && f.album_id.is_some())
             .find(|f| file.starts_with(&f.path))
             .and_then(|f| f.album_id.clone())
+    }
+
+    /// Flush queued album memberships in batched PUTs. Rows are only removed
+    /// once the server confirms the add, so a failure or crash just retries
+    /// later (the add is idempotent server-side). Only one flush runs at a time.
+    async fn flush_albums(&self) {
+        // If a flush is already running, let it drain the queue.
+        let _guard = match self.inner.album_flush.try_lock() {
+            Ok(g) => g,
+            Err(_) => return,
+        };
+        let client = match self.client().await {
+            Some(c) => c,
+            None => return,
+        };
+        loop {
+            let batch = self
+                .with_db(|db| db.take_album_batch(ALBUM_BATCH))
+                .await
+                .unwrap_or(None);
+            let Some((album_id, asset_ids)) = batch else {
+                break;
+            };
+            if asset_ids.is_empty() {
+                break;
+            }
+            match client.add_to_album(&album_id, &asset_ids).await {
+                Ok(()) => {
+                    let _ = self
+                        .with_db(|db| db.remove_album_adds(&album_id, &asset_ids))
+                        .await;
+                    log::info!(
+                        "added {} asset(s) to album {album_id}",
+                        asset_ids.len()
+                    );
+                }
+                Err(e) => {
+                    // Leave the rows for a later retry (idle flush / next run).
+                    log::warn!("album batch add failed for {album_id}: {e}");
+                    break;
+                }
+            }
+        }
     }
 
     // ---- control surface (called from IPC commands) ----------------------
@@ -657,6 +900,9 @@ impl SyncEngine {
         self.inner
             .debug
             .store(new_config.debug_logging, Ordering::Relaxed);
+        self.inner
+            .notifications
+            .store(new_config.notifications_enabled, Ordering::Relaxed);
         // Use the cached key — never re-read the keychain here.
         let key = self.inner.api_key.lock().await.clone();
         let client = build_client(&new_config, key.as_deref());
@@ -666,12 +912,76 @@ impl SyncEngine {
             *cfg = new_config;
             let _ = cfg.save();
         }
+        // A new server/insecure setting may need a fresh pin captured.
+        self.ensure_cert_pinned().await;
         // Restart watcher against the new folder set.
         let (tx, rx) = mpsc::unbounded_channel::<FileEvent>();
         self.start_watcher(tx).await;
         self.spawn_ingest(rx);
         self.scan_all().await;
         self.push_status().await;
+    }
+
+    /// On the first successful HTTPS connection to a server we are trusting
+    /// insecurely, capture and pin its certificate (trust-on-first-use), then
+    /// rebuild the client so it enforces that exact certificate from now on.
+    /// No-op once pinned, over plain HTTP, or when not in insecure mode.
+    async fn ensure_cert_pinned(&self) {
+        let (insecure_https, already_pinned) = {
+            let cfg = self.inner.config.lock().await;
+            (
+                cfg.allow_insecure && cfg.server_url.starts_with("https://"),
+                cfg.pinned_cert.is_some(),
+            )
+        };
+        if !insecure_https || already_pinned {
+            return;
+        }
+        let client = match self.client().await {
+            Some(c) => c,
+            None => return,
+        };
+        let Some(der) = client.capture_peer_cert().await else {
+            return;
+        };
+        use base64::Engine as _;
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&der);
+        let fp = crate::api::client::cert_fingerprint(&der);
+        let new_cfg = {
+            let mut cfg = self.inner.config.lock().await;
+            cfg.pinned_cert = Some(b64);
+            let _ = cfg.save();
+            cfg.clone()
+        };
+        let key = self.inner.api_key.lock().await.clone();
+        *self.inner.client.lock().await = build_client(&new_cfg, key.as_deref());
+        log::info!("pinned server TLS certificate (SHA-256 {fp})");
+    }
+
+    /// Forget the pinned certificate so the next connection re-captures it
+    /// (used when the server's certificate legitimately changes).
+    pub async fn forget_cert_pin(&self) {
+        {
+            let mut cfg = self.inner.config.lock().await;
+            if cfg.pinned_cert.is_none() {
+                return;
+            }
+            cfg.pinned_cert = None;
+            let _ = cfg.save();
+        }
+        // Rebuild now (back to capture mode), then re-pin on the next connect.
+        let new_cfg = self.inner.config.lock().await.clone();
+        let key = self.inner.api_key.lock().await.clone();
+        *self.inner.client.lock().await = build_client(&new_cfg, key.as_deref());
+        self.ensure_cert_pinned().await;
+        self.push_status().await;
+    }
+
+    /// The SHA-256 fingerprint of the currently pinned certificate, if any.
+    pub async fn cert_fingerprint(&self) -> Option<String> {
+        let cfg = self.inner.config.lock().await;
+        let der = decode_pinned_cert(cfg.pinned_cert.as_deref())?;
+        Some(crate::api::client::cert_fingerprint(&der))
     }
 
     /// Update the in-memory cached API key (mirrors a keychain write/delete).
@@ -689,7 +999,7 @@ impl SyncEngine {
 
     pub async fn retry_failed(&self) {
         {
-            let db = self.inner.db.lock().await;
+            let db = &self.inner.db;
             let _ = db.retry_failed();
         }
         self.emit(EVT_QUEUE, &());
@@ -697,10 +1007,16 @@ impl SyncEngine {
 
     pub async fn retry_item(&self, id: &str) {
         {
-            let db = self.inner.db.lock().await;
+            let db = &self.inner.db;
             let _ = db.retry_item(id);
         }
         self.emit(EVT_QUEUE, &());
+    }
+
+    pub async fn clear_history(&self) -> usize {
+        let n = self.with_db(|db| db.clear_history().unwrap_or(0)).await;
+        self.emit(EVT_HISTORY, &());
+        n
     }
 
     /// Snapshot of the current/last free-up-space scan.
@@ -750,7 +1066,10 @@ impl SyncEngine {
         let mut candidates: Vec<(String, i64, i64, String)> = Vec::new();
         let mut scanned = 0usize;
         for folder in folders {
-            for path in scan_folder(&folder) {
+            let files = tokio::task::spawn_blocking(move || scan_folder(&folder))
+                .await
+                .unwrap_or_default();
+            for path in files {
                 let matched = self.inner.config.lock().await.matches_filter(&path);
                 if !matched {
                     continue;
@@ -847,7 +1166,26 @@ impl SyncEngine {
     /// single batched move, instead of scripting Finder once per file.
     pub async fn free_space(&self, paths: Vec<String>) -> crate::sync::cleanup::FreeResult {
         use crate::sync::cleanup::FreeResult;
+        use std::collections::HashSet;
         let mut result = FreeResult::default();
+
+        // Safety: only files the last scan confirmed freeable (synced + not
+        // trashed on the server) may be trashed, so a path arriving from the UI
+        // can never be used to delete arbitrary files.
+        let allowed: HashSet<String> = {
+            let st = self.inner.freeable.lock().await;
+            st.items.iter().map(|i| i.path.clone()).collect()
+        };
+        let (paths, rejected): (Vec<String>, Vec<String>) =
+            paths.into_iter().partition(|p| allowed.contains(p));
+        for p in rejected {
+            result
+                .errors
+                .push(format!("{p}: not confirmed by the last scan — re-scan first"));
+        }
+        if paths.is_empty() {
+            return result;
+        }
 
         // Capture sizes before the files move.
         let sized: Vec<(String, i64)> = paths
@@ -860,7 +1198,7 @@ impl SyncEngine {
         // One batched move first — a single Trash operation, no repeated sound.
         match ctx.delete_all(&paths) {
             Ok(()) => {
-                let db = self.inner.db.lock().await;
+                let db = &self.inner.db;
                 for (p, size) in &sized {
                     result.freed_count += 1;
                     result.freed_bytes += size;
@@ -875,7 +1213,7 @@ impl SyncEngine {
                         Ok(()) => {
                             result.freed_count += 1;
                             result.freed_bytes += size;
-                            let db = self.inner.db.lock().await;
+                            let db = &self.inner.db;
                             let _ = db.add_freed(p, *size, None);
                         }
                         Err(e) => result.errors.push(format!("{p}: {e}")),
@@ -894,8 +1232,7 @@ impl SyncEngine {
     }
 
     pub async fn with_db<T>(&self, f: impl FnOnce(&Db) -> T) -> T {
-        let db = self.inner.db.lock().await;
-        f(&db)
+        f(&self.inner.db)
     }
 
     pub async fn status(&self) -> SyncStatus {
@@ -987,7 +1324,21 @@ fn build_client(cfg: &AppConfig, api_key: Option<&str>) -> Option<ImmichClient> 
     if api_key.is_empty() {
         return None;
     }
-    ImmichClient::new(&cfg.server_url, api_key, cfg.allow_insecure).ok()
+    // A pin only applies in insecure mode; with normal CA validation it's
+    // ignored (and a stale pin must not break a switch to a real cert).
+    let pinned = if cfg.allow_insecure {
+        decode_pinned_cert(cfg.pinned_cert.as_deref())
+    } else {
+        None
+    };
+    ImmichClient::new(&cfg.server_url, api_key, cfg.allow_insecure, pinned).ok()
+}
+
+/// Decode a base64-DER pinned certificate from config, if present and valid.
+fn decode_pinned_cert(b64: Option<&str>) -> Option<Vec<u8>> {
+    use base64::Engine as _;
+    let b64 = b64?;
+    base64::engine::general_purpose::STANDARD.decode(b64).ok()
 }
 
 /// A trash context that, on macOS, uses NSFileManager — silent and fast —
@@ -1019,20 +1370,107 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
-/// A permanent, file-specific error the server will never accept on retry
-/// (bad request, payload too large, unsupported media). Network/5xx/auth
-/// errors are treated as retryable instead.
-fn is_permanent_error(msg: &str) -> bool {
-    let m = msg.to_lowercase();
-    m.contains("400")
-        || m.contains("413")
-        || m.contains("415")
-        || m.contains("422")
+/// Some extensions are ambiguous (notably `.ts` = MPEG transport stream *or*
+/// TypeScript source). For those we sniff the file's magic bytes so we don't
+/// queue source/text files as if they were video. Unambiguous extensions are
+/// trusted without reading the file.
+fn extension_content_ok(path: &Path) -> bool {
+    match path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("ts") => is_mpeg_ts(path),
+        _ => true,
+    }
 }
 
-fn is_auth_error(msg: &str) -> bool {
-    let m = msg.to_lowercase();
-    m.contains("401") || m.contains("403") || m.contains("unauthorized")
+/// True if the file looks like an MPEG transport stream by its 0x47 sync bytes.
+/// Handles both standard 188-byte packets (DVB/ATSC) and 192-byte packets with
+/// a 4-byte timecode prefix (M2TS / Blu-ray style).
+fn is_mpeg_ts(path: &Path) -> bool {
+    use std::io::Read;
+    let mut f = match std::fs::File::open(path) {
+        Ok(f) => f,
+        Err(_) => return false,
+    };
+    let mut buf = [0u8; 384];
+    let mut filled = 0;
+    while filled < buf.len() {
+        match f.read(&mut buf[filled..]) {
+            Ok(0) => break,
+            Ok(n) => filled += n,
+            Err(_) => return false,
+        }
+    }
+    // 188-byte packets: sync at offsets 0 and 188.
+    let ts188 = filled > 188 && buf[0] == 0x47 && buf[188] == 0x47;
+    // 192-byte packets: sync at offsets 4 and 196.
+    let ts192 = filled > 196 && buf[4] == 0x47 && buf[196] == 0x47;
+    ts188 || ts192
+}
+
+fn ext_lower(path: &Path) -> Option<String> {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+}
+
+fn is_image_file(path: &Path) -> bool {
+    matches!(
+        ext_lower(path).as_deref(),
+        Some("heic" | "heif" | "jpg" | "jpeg" | "png" | "dng")
+    )
+}
+
+fn is_video_file(path: &Path) -> bool {
+    matches!(ext_lower(path).as_deref(), Some("mov" | "mp4" | "m4v"))
+}
+
+/// For a still image, find a same-named sibling video (the Live Photo motion).
+fn paired_live_video(still: &Path) -> Option<PathBuf> {
+    if !is_image_file(still) {
+        return None;
+    }
+    let stem = still.file_stem()?;
+    let dir = still.parent()?;
+    for ext in ["mov", "MOV", "mp4", "MP4", "m4v", "M4V"] {
+        let cand = dir.join(stem).with_extension(ext);
+        if cand != *still && cand.exists() {
+            return Some(cand);
+        }
+    }
+    None
+}
+
+/// For a video, find a same-named sibling still image (its Live Photo).
+fn paired_live_still(video: &Path) -> Option<PathBuf> {
+    if !is_video_file(video) {
+        return None;
+    }
+    let stem = video.file_stem()?;
+    let dir = video.parent()?;
+    for ext in ["heic", "HEIC", "heif", "HEIF", "jpg", "JPG", "jpeg", "JPEG"] {
+        let cand = dir.join(stem).with_extension(ext);
+        if cand.exists() {
+            return Some(cand);
+        }
+    }
+    None
+}
+
+/// Find an XMP sidecar next to `path`: either `name.ext.xmp` or `name.xmp`.
+fn find_sidecar(path: &Path) -> Option<PathBuf> {
+    let appended = PathBuf::from(format!("{}.xmp", path.to_string_lossy()));
+    if appended.exists() {
+        return Some(appended);
+    }
+    let replaced = path.with_extension("xmp");
+    if replaced != *path && replaced.exists() {
+        return Some(replaced);
+    }
+    None
 }
 
 /// Unix-seconds mtime from optional metadata, 0 if unavailable.
@@ -1041,4 +1479,70 @@ fn file_mtime(meta: Option<&std::fs::Metadata>) -> i64 {
         .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::api::client::ApiError;
+
+    #[test]
+    fn classifies_permanent_vs_retryable_errors() {
+        // Permanent client errors the server will never accept on retry.
+        assert!(ApiError::Status(400).is_permanent());
+        assert!(ApiError::Status(413).is_permanent());
+        assert!(ApiError::Status(415).is_permanent());
+        assert!(ApiError::Status(422).is_permanent());
+        // Retryable: auth, rate-limit, timeout, server, transport.
+        assert!(!ApiError::Status(401).is_permanent());
+        assert!(!ApiError::Status(429).is_permanent());
+        assert!(!ApiError::Status(408).is_permanent());
+        assert!(!ApiError::Status(500).is_permanent());
+        assert!(!ApiError::Transport("connection refused".into()).is_permanent());
+    }
+
+    #[test]
+    fn detects_auth_errors() {
+        assert!(ApiError::Status(401).is_auth());
+        assert!(ApiError::Status(403).is_auth());
+        assert!(!ApiError::Status(500).is_auth());
+        assert!(!ApiError::Transport("x".into()).is_auth());
+    }
+
+    #[test]
+    fn ts_content_check_distinguishes_video_from_typescript() {
+        use std::io::Write;
+        let dir = std::env::temp_dir();
+
+        // Fake MPEG-TS: 0x47 sync byte at offsets 0 and 188.
+        let video = dir.join("immich_test_stream.ts");
+        let mut buf = vec![0u8; 200];
+        buf[0] = 0x47;
+        buf[188] = 0x47;
+        std::fs::File::create(&video).unwrap().write_all(&buf).unwrap();
+        assert!(extension_content_ok(&video));
+
+        // TypeScript source — should be rejected.
+        let code = dir.join("immich_test_module.ts");
+        std::fs::write(&code, b"export const greeting = 'hello world';\n").unwrap();
+        assert!(!extension_content_ok(&code));
+
+        // Non-ambiguous extensions are trusted without reading.
+        assert!(extension_content_ok(std::path::Path::new("/x/photo.jpg")));
+
+        let _ = std::fs::remove_file(&video);
+        let _ = std::fs::remove_file(&code);
+    }
+
+    #[test]
+    fn hex_roundtrips_to_bytes() {
+        assert_eq!(hex_to_bytes("00ff10a5"), vec![0x00, 0xff, 0x10, 0xa5]);
+        assert_eq!(hex_to_bytes(""), Vec::<u8>::new());
+        // SHA1("abc") hex → 20 bytes
+        assert_eq!(
+            hex_to_bytes("a9993e364706816aba3e25717850c26c9cd0d89d").len(),
+            20
+        );
+    }
 }

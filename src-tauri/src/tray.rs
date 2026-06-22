@@ -8,6 +8,10 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::sync::SyncEngine;
 
+/// Managed handle to the disabled "Status:" menu item so we can update its
+/// text on status changes (the tray exposes no menu getter to look it up).
+struct StatusMenuItem<R: Runtime>(MenuItem<R>);
+
 const ID_STATUS: &str = "status";
 const ID_PAUSE: &str = "pause";
 const ID_RESUME: &str = "resume";
@@ -32,6 +36,9 @@ pub fn build_tray<R: Runtime>(app: &AppHandle<R>) -> Result<()> {
             &status, &sep1, &pause, &resume, &dashboard, &web, &sep2, &quit,
         ],
     )?;
+
+    // Keep a handle to the status item so status updates can rewrite its text.
+    app.manage(StatusMenuItem(status.clone()));
 
     let initial_icon = tauri::image::Image::from_bytes(state_icon_bytes("disconnected"))?;
 
@@ -121,13 +128,33 @@ fn icon_tooltip(icon: &str) -> &'static str {
     }
 }
 
-/// Update the tray icon + tooltip in response to a status change.
-/// `icon` is the icon key from `SyncStatus` (not the raw state).
-pub fn update_status_label<R: Runtime>(app: &AppHandle<R>, icon: &str) {
+/// The "Status: …" line shown at the top of the tray menu, including queue
+/// depth so a quick right-click tells you what the app is doing.
+fn status_menu_label(icon: &str, pending: i64) -> String {
+    let body = match icon {
+        "syncing" if pending > 0 => format!("Syncing — {pending} left"),
+        "syncing" => "Syncing".to_string(),
+        "paused" => "Paused".to_string(),
+        "insecure" if pending > 0 => format!("Connected (insecure) — {pending} queued"),
+        "insecure" => "Connected (insecure)".to_string(),
+        "secure" if pending > 0 => format!("Connected — {pending} queued"),
+        "secure" => "Up to date".to_string(),
+        _ => "Not connected".to_string(),
+    };
+    format!("Status: {body}")
+}
+
+/// Update the tray icon, tooltip, and the "Status:" menu line in response to a
+/// status change. `icon` is the icon key from `SyncStatus` (not the raw state).
+pub fn update_status_label<R: Runtime>(app: &AppHandle<R>, icon: &str, pending: i64) {
     if let Some(tray) = app.tray_by_id("main-tray") {
         let _ = tray.set_tooltip(Some(format!("Immich SyncDesk — {}", icon_tooltip(icon))));
         if let Ok(image) = tauri::image::Image::from_bytes(state_icon_bytes(icon)) {
             let _ = tray.set_icon(Some(image));
         }
+    }
+    // Refresh the disabled "Status:" line in the menu.
+    if let Some(item) = app.try_state::<StatusMenuItem<R>>() {
+        let _ = item.0.set_text(status_menu_label(icon, pending));
     }
 }

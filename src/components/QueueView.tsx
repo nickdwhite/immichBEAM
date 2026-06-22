@@ -4,6 +4,7 @@ import { api } from "../lib/tauri";
 import { fmtBytes } from "../lib/format";
 import { useQueue } from "../hooks/useQueue";
 import { useProgress } from "../hooks/useProgress";
+import { useToast } from "./Toast";
 import type { SyncStatus } from "../types";
 
 function basename(p: string): string {
@@ -18,16 +19,17 @@ export function QueueView({ status }: { status: SyncStatus }) {
   const totalBytes = items.reduce((sum, i) => sum + (i.size || 0), 0);
   const [busy, setBusy] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
+  const toast = useToast();
 
   const repair = async () => {
     setBusy(true);
-    setNote(null);
     try {
       const r = await api.repairQueue();
-      setNote(
-        `Repair done: ${r.requeued_active} unstuck, ${r.removed_missing} missing removed, ${r.resized} sizes filled in.`,
+      toast.success(
+        `Repair done: ${r.requeued_active} unstuck, ${r.removed_missing} missing removed, ${r.resized} sizes filled in`,
       );
+    } catch (e) {
+      toast.error(`Repair failed: ${e}`);
     } finally {
       setBusy(false);
     }
@@ -35,10 +37,9 @@ export function QueueView({ status }: { status: SyncStatus }) {
 
   const clear = async () => {
     setBusy(true);
-    setNote(null);
     try {
       const n = await api.clearQueue();
-      setNote(`Cleared ${n} item${n === 1 ? "" : "s"} from the queue.`);
+      toast.info(`Cleared ${n} item${n === 1 ? "" : "s"} from the queue`);
       setConfirmClear(false);
     } finally {
       setBusy(false);
@@ -84,12 +85,6 @@ export function QueueView({ status }: { status: SyncStatus }) {
           {status.uploaded_session} uploaded this session
         </span>
       </div>
-
-      {note && (
-        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-300">
-          {note}
-        </div>
-      )}
 
       {confirmClear && (
         <div className="flex items-center gap-3 rounded-lg border border-immich-200 bg-immich-50 p-3 dark:border-immich-900 dark:bg-immich-900/30">
@@ -139,7 +134,9 @@ export function QueueView({ status }: { status: SyncStatus }) {
                   </span>
                   {active && prog ? (
                     <span className="text-xs tabular-nums text-slate-500">
-                      {fmtBytes(prog.sent)} / {fmtBytes(prog.total)} · {prog.pct}%
+                      {prog.phase === "hashing"
+                        ? `Hashing ${prog.pct}%`
+                        : `${fmtBytes(prog.sent)} / ${fmtBytes(prog.total)} · ${prog.pct}%`}
                     </span>
                   ) : (
                     <span className="text-xs tabular-nums text-slate-400">
@@ -159,6 +156,13 @@ export function QueueView({ status }: { status: SyncStatus }) {
             );
           })}
         </ul>
+      )}
+
+      {status.pending > items.length && (
+        <p className="text-center text-xs text-slate-400">
+          + {(status.pending - items.length).toLocaleString()} more queued (showing
+          the first {items.length.toLocaleString()})
+        </p>
       )}
     </div>
   );

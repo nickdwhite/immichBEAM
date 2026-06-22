@@ -2,7 +2,7 @@ import { useState } from "react";
 import { disable, enable } from "@tauri-apps/plugin-autostart";
 import { Loader2, Save } from "lucide-react";
 import { api } from "../lib/tauri";
-import { LogViewer } from "./LogViewer";
+import { useToast } from "./Toast";
 import type { ConfigDto } from "../types";
 
 export function SyncSettings({
@@ -16,7 +16,9 @@ export function SyncSettings({
   const [bandwidth, setBandwidth] = useState(config.bandwidth_limit_kbps);
   const [autostart, setAutostart] = useState(config.autostart);
   const [debug, setDebug] = useState(config.debug_logging);
+  const [notifications, setNotifications] = useState(config.notifications_enabled);
   const [saving, setSaving] = useState(false);
+  const toast = useToast();
 
   const save = async () => {
     setSaving(true);
@@ -34,8 +36,12 @@ export function SyncSettings({
         bandwidth_limit_kbps: bandwidth,
         autostart,
         debug_logging: debug,
+        notifications_enabled: notifications,
       });
       onSaved();
+      toast.success("Sync settings saved");
+    } catch (e) {
+      toast.error(`Couldn't save settings: ${e}`);
     } finally {
       setSaving(false);
     }
@@ -85,6 +91,16 @@ export function SyncSettings({
         Launch Immich SyncDesk automatically on login
       </label>
 
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={notifications}
+          onChange={(e) => setNotifications(e.target.checked)}
+          className="rounded border-slate-300 text-brand-600"
+        />
+        Show desktop notifications (e.g. when an upload fails)
+      </label>
+
       <div>
         <label className="flex items-center gap-2 text-sm">
           <input
@@ -109,10 +125,6 @@ export function SyncSettings({
         {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
         Save settings
       </button>
-
-      <div className="border-t border-slate-200 pt-6 dark:border-slate-800">
-        <LogViewer />
-      </div>
     </div>
   );
 }

@@ -27,7 +27,8 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data: https: http:; connect-src 'self' https: http: ws: wss:; style-src 'self' 'unsafe-inline'",
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src 'self'",
+      "devCsp": "default-src 'self'; img-src 'self' data: https: http:; connect-src 'self' https: http: ws: wss:; style-src 'self' 'unsafe-inline'",
       "dangerousDisableAssetCspModification": false
     }
   },
@@ -61,9 +62,13 @@
   },
   "plugins": {
     "updater": {
-      "active": false,
-      "pubkey": "",
-      "endpoints": []
+      "pubkey": "REPLACE_WITH_YOUR_TAURI_UPDATER_PUBLIC_KEY",
+      "endpoints": [
+        "https://github.com/REPLACE_OWNER/immich-syncdesk/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

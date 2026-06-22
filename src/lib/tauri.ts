@@ -16,6 +16,7 @@ import type {
   QueueItem,
   RepairReport,
   SyncStatus,
+  UpdateInfo,
 } from "../types";
 
 // ---- commands -----------------------------------------------------------
@@ -43,10 +44,15 @@ export const api = {
   clearApiKey: () => invoke<void>("clear_api_key"),
 
   getStatus: () => invoke<SyncStatus>("get_status"),
+  getConnectionInfo: () => invoke<ConnectionInfo>("get_connection_info"),
+  getCertFingerprint: () => invoke<string | null>("get_cert_fingerprint"),
+  forgetCertPin: () => invoke<void>("forget_cert_pin"),
   defaultExtensions: () => invoke<string[]>("default_extensions"),
-  getQueue: () => invoke<QueueItem[]>("get_queue"),
+  getQueue: (limit = 500) => invoke<QueueItem[]>("get_queue", { limit }),
   getFailed: () => invoke<QueueItem[]>("get_failed"),
-  getHistory: (limit = 200) => invoke<HistoryItem[]>("get_history", { limit }),
+  getHistory: (limit = 500, status?: string) =>
+    invoke<HistoryItem[]>("get_history", { limit, status: status ?? null }),
+  clearHistory: () => invoke<number>("clear_history"),
 
   getStats: () => invoke<HistoryStats>("get_stats"),
 
@@ -69,6 +75,9 @@ export const api = {
 
   getLogPath: () => invoke<string>("get_log_path"),
   readLog: (lines = 500) => invoke<string>("read_log", { lines }),
+
+  checkForUpdate: () => invoke<UpdateInfo>("check_for_update"),
+  installUpdate: () => invoke<void>("install_update"),
 };
 
 // ---- events -------------------------------------------------------------
