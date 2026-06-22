@@ -190,7 +190,9 @@ def write_png(rows, path):
 
 
 if __name__ == "__main__":
-    out = os.path.join(os.path.dirname(__file__), "states")
+    out = os.path.normpath(
+        os.path.join(os.path.dirname(__file__), "..", "src-tauri", "icons", "states")
+    )
     os.makedirs(out, exist_ok=True)
     for name, color in STATES.items():
         buf = blank()

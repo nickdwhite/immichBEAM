@@ -19,8 +19,9 @@ import numpy as np
 from PIL import Image
 
 HERE = os.path.dirname(__file__)
+ICONS = os.path.normpath(os.path.join(HERE, "..", "src-tauri", "icons"))
 MASTER = os.path.join(HERE, "logo-master.png")
-OUT = os.path.join(HERE, "logo-source.png")
+OUT = os.path.join(ICONS, "logo-source.png")
 
 SIZE = 1024              # output icon size
 BODY_FRAC = 0.82         # squircle fraction of the canvas (rest is margin)

@@ -101,6 +101,6 @@ Produces `.dmg` (macOS), `.msi`/NSIS (Windows), and `.deb`/`.AppImage` (Linux).
   it for releases, generate a minisign key, set `plugins.updater.pubkey` and the
   Releases `endpoint` in `tauri.conf.json`, and add the private key as a GitHub
   Actions secret. Step-by-step in `docs/RELEASING.md`.
-- The app icon and tray icons are generated from `src-tauri/icons/logo-master.png`
-  via `src-tauri/icons/generate_logo.py` and `generate_state_icons.py`, then
-  `pnpm tauri icon`.
+- The app icon and tray icons are generated from the brand artwork in `design/`
+  (`design/logo-master.png` via `design/generate_logo.py` /
+  `generate_state_icons.py`, then `pnpm tauri icon`). See `design/README.md`.
