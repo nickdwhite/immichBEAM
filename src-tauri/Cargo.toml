@@ -1,12 +1,12 @@
 [package]
-name = "immich-syncdesk"
-version = "0.1.0"
+name = "immich-dock"
+version = "0.3.1"
 description = "Cross-platform desktop sync client for Immich"
-authors = ["Immich SyncDesk"]
+authors = ["Immich Dock"]
 edition = "2021"
 
 [lib]
-name = "immich_syncdesk_lib"
+name = "immich_dock_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -26,9 +26,11 @@ tauri-plugin-single-instance = "2"
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 
-# HTTP client. `rustls-tls` also enables the TLS-info API (ClientBuilder::tls_info
-# + reqwest::tls::TlsInfo) we use to capture the peer certificate for pinning.
-reqwest = { version = "0.12", features = ["json", "multipart", "stream", "rustls-tls"], default-features = false }
+# HTTP client. Matches the reqwest 0.13 that Tauri's stack uses, so only one
+# copy is compiled. In 0.13 the `rustls-tls` feature was renamed to `rustls`
+# (now the default backend); it also enables the TLS-info API
+# (ClientBuilder::tls_info + reqwest::tls::TlsInfo) used for cert pinning.
+reqwest = { version = "0.13", features = ["json", "multipart", "stream", "rustls"], default-features = false }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }

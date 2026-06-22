@@ -16,7 +16,7 @@ export function About() {
       <div className="flex items-center gap-3">
         <Logo size={44} className="rounded-xl" />
         <div>
-          <h2 className="text-base font-semibold">Immich SyncDesk</h2>
+          <h2 className="text-base font-semibold">Immich Dock</h2>
           <p className="text-sm text-slate-500">
             Desktop sync client for Immich{version && ` · v${version}`}
           </p>

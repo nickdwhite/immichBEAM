@@ -30,3 +30,15 @@ dist-ssr
 *.p12
 *.pfx
 *.key
+
+# OS cruft
+Thumbs.db
+*.icloud
+
+# Build bundles (also covered by src-tauri/target, belt-and-suspenders)
+*.dmg
+*.app/
+
+# Local scratch (icon previews, working files)
+src-tauri/icons/_*
+scratch/

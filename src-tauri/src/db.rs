@@ -66,7 +66,7 @@ pub struct HistoryItem {
 impl Db {
     /// Open (creating if needed) the database at the default app location.
     pub fn open_default() -> Result<Self> {
-        let path = AppConfig::app_dir()?.join("syncdesk.db");
+        let path = AppConfig::app_dir()?.join("dock.db");
         Self::open(&path)
     }
 

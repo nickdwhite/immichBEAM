@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
-const APP_DIR: &str = "immich-syncdesk";
+const APP_DIR: &str = "immich-dock";
 const CONFIG_FILE: &str = "config.json";
 
 /// A single folder watched for new media.
@@ -184,7 +184,7 @@ fn generate_device_id() -> String {
         .ok()
         .and_then(|h| h.into_string().ok())
         .unwrap_or_else(|| "unknown-host".into());
-    format!("syncdesk-{host}-{}", uuid::Uuid::new_v4())
+    format!("dock-{host}-{}", uuid::Uuid::new_v4())
 }
 
 #[cfg(test)]

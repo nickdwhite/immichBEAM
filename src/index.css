@@ -17,9 +17,10 @@ body {
   @apply bg-slate-50 text-slate-900 antialiased;
 }
 
-/* Class-based dark mode (toggle in-app); html.dark is set by the theme manager. */
+/* Class-based dark mode (toggle in-app); html.dark is set by the theme manager.
+   The canvas uses the logo's dark navy; panels layer slate/navy on top. */
 .dark body {
-  @apply bg-slate-900 text-slate-100;
+  @apply bg-navy-950 text-slate-100;
 }
 
 /* Visible keyboard focus for accessibility. */

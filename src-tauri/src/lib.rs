@@ -1,4 +1,4 @@
-//! Immich SyncDesk — Tauri application entry point and setup.
+//! Immich Dock — Tauri application entry point and setup.
 
 mod api;
 mod commands;
@@ -38,7 +38,7 @@ pub fn run() {
                 .targets([
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
                     tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
-                        file_name: Some("immich-syncdesk".to_string()),
+                        file_name: Some("immich-dock".to_string()),
                     }),
                 ])
                 .max_file_size(5_000_000)
@@ -53,6 +53,14 @@ pub fn run() {
         .manage(updater::PendingUpdate::default())
         .setup(|app| {
             let handle = app.handle().clone();
+
+            // Keep the title bar in sync with the running version, e.g.
+            // "immich-dock v0.1.0", regardless of what's baked into
+            // tauri.conf.json at build time.
+            if let Some(window) = app.get_webview_window("main") {
+                let version = app.package_info().version.to_string();
+                let _ = window.set_title(&format!("immich-dock v{version}"));
+            }
 
             // Load persisted config and open the database.
             let config = AppConfig::load().unwrap_or_default();
@@ -137,5 +145,5 @@ pub fn run() {
             updater::install_update,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Immich SyncDesk");
+        .expect("error while running Immich Dock");
 }

@@ -791,7 +791,7 @@ impl SyncEngine {
             .app
             .notification()
             .builder()
-            .title("Immich SyncDesk — upload failed")
+            .title("Immich Dock — upload failed")
             .body(format!("Gave up on \"{filename}\" after repeated retries."))
             .show();
     }

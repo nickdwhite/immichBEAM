@@ -1,4 +1,4 @@
-# Immich SyncDesk — Security Review
+# Immich Dock — Security Review
 
 _Date: 2026-06-21 · Scope: full codebase (Rust backend + React/Tauri frontend) · Reviewer: automated assist_
 
@@ -13,7 +13,7 @@ free-space/trash), the updater (`updater.rs`), and the frontend (`src/`).
 
 ## Threat model
 
-Immich SyncDesk is a single-user desktop client that talks only to the user's
+Immich Dock is a single-user desktop client that talks only to the user's
 own Immich server. The realistic adversaries are:
 
 1. A network in-path attacker between the app and the server (especially on a

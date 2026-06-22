@@ -78,12 +78,12 @@ export function Sidebar({
   }, []);
 
   return (
-    <aside className="flex w-56 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+    <aside className="flex w-56 flex-col border-r border-slate-200 bg-white dark:border-navy-800 dark:bg-navy-900">
       <div className="flex items-center gap-2 px-4 py-4">
         <Logo size={32} className="rounded-lg" />
         <div className="leading-tight">
           <div className="text-sm font-semibold">Immich</div>
-          <div className="text-xs text-slate-500">SyncDesk</div>
+          <div className="text-xs text-slate-500">Dock</div>
         </div>
       </div>
 

@@ -1,17 +1,17 @@
-# Building & Releasing Immich SyncDesk
+# Building & Releasing Immich Dock
 
 ## TL;DR
 
 - **Local dev:** `pnpm tauri dev`
 - **Local installer for your current OS:** `pnpm tauri build`
-- **All three OSes, automatically:** push a git tag like `v0.1.0` — GitHub
+- **All three OSes, automatically:** push a git tag like `v0.3.1` — GitHub
   Actions builds macOS, Windows, and Linux installers and attaches them to a
   draft Release. **No Apple/Microsoft account required.**
 
 ## Next steps locally (macOS)
 
 ```bash
-cd immich-syncdesk
+cd immich-dock
 # run the unit tests
 cd src-tauri && cargo test && cd ..
 # produce a local installer (.dmg + .app) in src-tauri/target/release/bundle/
@@ -55,8 +55,8 @@ Two workflows live in `.github/workflows/`:
 
 To cut a release:
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.3.1
+git push origin v0.3.1
 ```
 GitHub-hosted runners are **free for public repositories** (private repos get a
 monthly free-minutes allowance). You do **not** need any developer account to

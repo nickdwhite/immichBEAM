@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    immich_syncdesk_lib::run()
+    immich_dock_lib::run()
 }

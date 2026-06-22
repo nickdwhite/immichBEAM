@@ -1,7 +1,7 @@
 {
-  "name": "immich-syncdesk",
+  "name": "immich-dock",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.3.1",
   "type": "module",
   "description": "Cross-platform desktop sync client for Immich",
   "scripts": {

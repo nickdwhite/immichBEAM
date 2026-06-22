@@ -1,4 +1,4 @@
-# Immich SyncDesk — Setup & TODO
+# Immich Dock — Setup & TODO
 
 Operational steps that require *your* accounts/keys (so they can't be fully
 automated), plus deferred engineering work. For the architecture review see
@@ -11,14 +11,14 @@ automated), plus deferred engineering work. For the architecture review see
 The repo is already initialized locally with an initial commit. To publish:
 
 ```bash
-cd ~/Downloads/projects/immich-syncdesk
+cd ~/Downloads/projects/immich-dock
 
 # Install + log in to the GitHub CLI (browser-based; no token to paste)
 brew install gh
 gh auth login          # choose GitHub.com → HTTPS → login with a browser
 
 # Create the repo and push
-gh repo create immich-syncdesk --public --source=. --push
+gh repo create immich-dock --public --source=. --push
 ```
 
 ## 2. GitHub Actions (already configured)
@@ -33,8 +33,8 @@ Two workflows live in `.github/workflows/`:
 Cut a release:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.3.1
+git push origin v0.3.1
 # → watch the Actions tab; ~10-15 min; review & publish the draft Release
 ```
 
@@ -57,7 +57,7 @@ self-generated** key — unrelated to OS code signing.
 
 1. Generate the updater key pair:
    ```bash
-   pnpm tauri signer generate -w ~/.tauri/immich-syncdesk.key
+   pnpm tauri signer generate -w ~/.tauri/immich-dock.key
    ```
    Save the password somewhere safe. **Losing this key means you can never push
    updates to already-installed apps.**
@@ -68,11 +68,11 @@ self-generated** key — unrelated to OS code signing.
 
 3. Add the **private** key + password as GitHub repo secrets
    (Settings → Secrets and variables → Actions):
-   - `TAURI_SIGNING_PRIVATE_KEY` = contents of `~/.tauri/immich-syncdesk.key`
+   - `TAURI_SIGNING_PRIVATE_KEY` = contents of `~/.tauri/immich-dock.key`
    - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` = the password you chose
 
 4. Update the `endpoints` URL in `tauri.conf.json` to your actual repo:
-   `https://github.com/<your-user>/immich-syncdesk/releases/latest/download/latest.json`
+   `https://github.com/<your-user>/immich-dock/releases/latest/download/latest.json`
 
 ### Code wiring — DONE ✅
 

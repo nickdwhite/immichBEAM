@@ -6,7 +6,7 @@
 use anyhow::{Context, Result};
 use keyring::Entry;
 
-const SERVICE: &str = "com.immichsync.desktop";
+const SERVICE: &str = "com.immichdock.desktop";
 const ACCOUNT: &str = "api-key";
 
 fn entry() -> Result<Entry> {

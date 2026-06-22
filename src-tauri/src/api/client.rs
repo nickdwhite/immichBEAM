@@ -113,7 +113,7 @@ impl ImmichClient {
     ) -> Result<Self> {
         let base_url = base_url.trim_end_matches('/').to_string();
         let mut builder = Client::builder()
-            .user_agent(concat!("ImmichSyncDesk/", env!("CARGO_PKG_VERSION")))
+            .user_agent(concat!("ImmichDock/", env!("CARGO_PKG_VERSION")))
             // Expose the negotiated peer certificate (for TOFU capture).
             .tls_info(true)
             .connect_timeout(Duration::from_secs(10))
@@ -125,9 +125,11 @@ impl ImmichClient {
         if let Some(der) = pinned_cert {
             let cert = reqwest::Certificate::from_der(&der)
                 .context("pinned certificate is not valid DER")?;
-            builder = builder
-                .tls_built_in_root_certs(false)
-                .add_root_certificate(cert);
+            // Trust ONLY the pinned certificate — no built-in CA roots — so a
+            // swapped cert from an in-path attacker is rejected (reqwest 0.13
+            // replaced `tls_built_in_root_certs(false)` + `add_root_certificate`
+            // with `tls_certs_only`).
+            builder = builder.tls_certs_only(vec![cert]);
             // Self-signed homelab certs are usually issued to an IP, which can't
             // appear in a cert's hostname fields — so relax hostname checking
             // only for IP-literal servers. For DNS names keep it on, so the cert
