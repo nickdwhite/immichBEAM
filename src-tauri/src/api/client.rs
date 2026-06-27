@@ -182,7 +182,7 @@ impl ImmichClient {
         )?;
         let resp = temp
             .http
-            .post(temp.url("/auth/login"))
+            .post(temp.url("/api/auth/login"))
             .json(&serde_json::json!({
                 "email": email,
                 "password": password,
