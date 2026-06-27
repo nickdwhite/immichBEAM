@@ -234,3 +234,14 @@ New feature ideas, partially inspired by reviewing
 - [x] **Conflict resolution UI** — `conflict_policy` config (reupload/skip),
       enforced in both the watcher ingest and initial scan paths, with a
       dropdown in Sync Settings. ✅
+
+### Authentication
+- [ ] **Username/password login** — add `POST /auth/login` as an alternative to
+      API key auth. User enters email + password → we get a JWT bearer token →
+      use for API calls. Store credentials in the OS keychain and re-login
+      automatically when the token expires. Friendlier onboarding (no need to
+      find the API key in the Immich web UI).
+- [ ] **OAuth login** — support Immich's OAuth2 flow (`POST /oauth/authorize` →
+      `POST /oauth/callback`) for servers configured with an external identity
+      provider. Requires opening a browser for the authorization step and
+      capturing the callback.

@@ -23,6 +23,7 @@ pub struct FileEvent {
 }
 
 /// Tracks per-folder watch state for health monitoring.
+#[allow(dead_code)]
 struct WatchedEntry {
     path: PathBuf,
     recursive: bool,

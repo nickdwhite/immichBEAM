@@ -4,7 +4,7 @@
 
 - **Local dev:** `pnpm tauri dev`
 - **Local installer for your current OS:** `pnpm tauri build`
-- **All three OSes, automatically:** push a git tag like `v0.3.1` — GitHub
+- **All three OSes, automatically:** push a git tag like `v0.3.5` — GitHub
   Actions builds macOS, Windows, and Linux installers and attaches them to a
   draft Release. **No Apple/Microsoft account required.**
 
@@ -55,8 +55,8 @@ Two workflows live in `.github/workflows/`:
 
 To cut a release:
 ```bash
-git tag v0.3.1
-git push origin v0.3.1
+git tag v0.3.5
+git push origin v0.3.5
 ```
 GitHub-hosted runners are **free for public repositories** (private repos get a
 monthly free-minutes allowance). You do **not** need any developer account to
