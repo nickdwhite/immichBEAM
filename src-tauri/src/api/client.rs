@@ -174,30 +174,64 @@ impl ImmichClient {
         allow_insecure: bool,
         pinned_cert: Option<Vec<u8>>,
     ) -> Result<(Self, super::types::LoginResponse)> {
+        log::info!(
+            "auth: attempting password login to {base_url} as {email} \
+             (insecure={allow_insecure}, pinned={})",
+            pinned_cert.is_some()
+        );
         let temp = Self::with_auth(
             base_url,
             AuthMethod::ApiKey(String::new()),
             allow_insecure,
             pinned_cert.clone(),
         )?;
-        let resp = temp
+        let endpoint = temp.url("/api/auth/login");
+        let resp = match temp
             .http
-            .post(temp.url("/api/auth/login"))
+            .post(&endpoint)
             .json(&serde_json::json!({
                 "email": email,
                 "password": password,
             }))
             .send()
             .await
-            .context("login request failed")?;
+            .context("login request failed")
+        {
+            Ok(r) => {
+                log::info!("auth: login endpoint responded {}", r.status());
+                r
+            }
+            // The transport/TLS error chain is the part we most need to see;
+            // {:#} makes anyhow print every cause, not just the top message.
+            Err(e) => {
+                log::warn!("auth: login request to {endpoint} failed: {e:#}");
+                return Err(e);
+            }
+        };
         if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
+            log::warn!("auth: login rejected — invalid credentials for {email}");
             return Err(anyhow!("invalid email or password"));
         }
-        let resp = resp
-            .error_for_status()
-            .context("login failed")?;
-        let login: super::types::LoginResponse =
-            resp.json().await.context("invalid login response")?;
+        let resp = match resp.error_for_status().context("login failed") {
+            Ok(r) => r,
+            Err(e) => {
+                log::warn!("auth: login unsuccessful status: {e:#}");
+                return Err(e);
+            }
+        };
+        let login: super::types::LoginResponse = match resp.json().await.context("invalid login response") {
+            Ok(l) => l,
+            Err(e) => {
+                log::warn!("auth: login response could not be decoded: {e:#}");
+                return Err(e);
+            }
+        };
+        log::info!(
+            "auth: login successful — user {} (id {}, admin = {})",
+            login.user_email,
+            login.user_id,
+            login.is_admin
+        );
         let client = Self::with_auth(
             base_url,
             AuthMethod::Bearer(login.access_token.clone()),

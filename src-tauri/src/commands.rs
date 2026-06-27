@@ -163,7 +163,10 @@ pub async fn login_with_password(
     let (_client, login) =
         ImmichClient::login(&url, &email, &password, allow_insecure, pinned)
             .await
-            .map_err(map_err)?;
+            // {:#} prints the full anyhow cause chain so the user (and we) can
+            // see e.g. "login request failed: invalid certificate: ..." instead
+            // of just the opaque top-level message.
+            .map_err(|e| format!("{e:#}"))?;
 
     log::info!(
         "password login successful for {} (user id {}, admin = {})",
