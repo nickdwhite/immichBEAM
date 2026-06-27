@@ -10,7 +10,7 @@ on:
 
 jobs:
   frontend:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -27,12 +27,18 @@ jobs:
         run: pnpm build
 
   rust:
+    continue-on-error: ${{ matrix.experimental || false }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: ubuntu-22.04
+          - platform: ubuntu-24.04
+          - platform: ubuntu-24.04-arm
           - platform: windows-latest
+          # Windows arm64 hosted runners are still public preview as of
+          # 2026-06-27, so keep this signal non-blocking in CI for now.
+          - platform: windows-11-arm
+            experimental: true
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -43,7 +49,7 @@ jobs:
         with:
           workspaces: "./src-tauri -> target"
       - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
+        if: startsWith(matrix.platform, 'ubuntu-')
         run: |
           sudo apt-get update
           sudo apt-get install -y \

@@ -12,6 +12,7 @@ on:
 
 jobs:
   build:
+    continue-on-error: ${{ matrix.experimental || false }}
     permissions:
       contents: write # needed to create the release and upload assets
     strategy:
@@ -22,12 +23,21 @@ jobs:
           - platform: macos-latest
             args: "--target universal-apple-darwin"
             rust-targets: "aarch64-apple-darwin,x86_64-apple-darwin"
-          - platform: ubuntu-22.04
+          - platform: ubuntu-24.04
+            args: ""
+            rust-targets: ""
+          - platform: ubuntu-24.04-arm
             args: ""
             rust-targets: ""
           - platform: windows-latest
             args: ""
             rust-targets: ""
+          # Windows arm64 hosted runners are still public preview as of
+          # 2026-06-27, so keep this release lane best-effort for now.
+          - platform: windows-11-arm
+            args: ""
+            rust-targets: ""
+            experimental: true
 
     runs-on: ${{ matrix.platform }}
 
@@ -57,7 +67,7 @@ jobs:
           workspaces: "./src-tauri -> target"
 
       - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
+        if: startsWith(matrix.platform, 'ubuntu-')
         run: |
           sudo apt-get update
           sudo apt-get install -y \
