@@ -236,11 +236,15 @@ New feature ideas, partially inspired by reviewing
       dropdown in Sync Settings. ✅
 
 ### Authentication
-- [ ] **Username/password login** — add `POST /auth/login` as an alternative to
-      API key auth. User enters email + password → we get a JWT bearer token →
-      use for API calls. Store credentials in the OS keychain and re-login
-      automatically when the token expires. Friendlier onboarding (no need to
-      find the API key in the Immich web UI).
+- [x] **Username/password login** — `POST /auth/login` is wired as an
+      alternative to API key auth (commit `4cb617b`). User enters email +
+      password → we get a JWT bearer token → used for all API calls. Credentials
+      stored in the OS keychain (`login-email`/`login-password`/`login-token`),
+      ServerSettings offers API-Key / Email-Password tabs. ✅
+- [ ] **Automatic token refresh** — when the JWT bearer token expires (401),
+      re-login automatically using the stored email/password instead of
+      surfacing an auth error. `keychain::set_login_token` is already stubbed
+      for this; the 401 → re-login path in `sync/engine.rs` is not yet wired.
 - [ ] **OAuth login** — support Immich's OAuth2 flow (`POST /oauth/authorize` →
       `POST /oauth/callback`) for servers configured with an external identity
       provider. Requires opening a browser for the authorization step and
