@@ -109,6 +109,8 @@ pub struct ConnectionInfo {
     pub authenticated: bool,
     pub version: Option<String>,
     pub user_email: Option<String>,
+    /// True when the signed-in account is an Immich administrator.
+    pub is_admin: bool,
     /// True when the server URL uses plain HTTP.
     pub insecure: bool,
     pub message: String,

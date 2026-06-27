@@ -78,6 +78,7 @@ export function ServerSettings({
         authenticated: false,
         version: null,
         user_email: null,
+        is_admin: false,
         insecure: url.startsWith("http://"),
         message: String(e),
       });
@@ -108,18 +109,40 @@ export function ServerSettings({
       setResult(info);
       setPassword("");
       onSaved();
-      toast.success("Logged in successfully");
+      toast.success(info.is_admin ? "Logged in as admin" : "Logged in successfully");
     } catch (e) {
       setResult({
         reachable: false,
         authenticated: false,
         version: null,
         user_email: null,
+        is_admin: false,
         insecure: url.startsWith("http://"),
         message: String(e),
       });
+      toast.error(`Login failed: ${e}`);
     } finally {
       setLoggingIn(false);
+    }
+  };
+
+  /// Validate the active password session (bearer token) against the server.
+  const testSession = async () => {
+    setTesting(true);
+    setResult(null);
+    try {
+      const info = await api.getConnectionInfo();
+      setConn(info);
+      setResult(info);
+      if (info.authenticated) {
+        toast.success("Session is valid");
+      } else {
+        toast.error(info.message || "Session is not valid");
+      }
+    } catch (e) {
+      toast.error(`Couldn't validate session: ${e}`);
+    } finally {
+      setTesting(false);
     }
   };
 
@@ -155,6 +178,11 @@ export function ServerSettings({
             {conn.authenticated ? "Connected" : "Reachable, not authenticated"}
             {conn.version && ` · Immich v${conn.version}`}
             {conn.user_email && ` · ${conn.user_email}`}
+            {conn.authenticated && conn.is_admin && (
+              <span className="ml-1.5 inline-flex items-center rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
+                admin
+              </span>
+            )}
           </span>
           <SecurityBadge url={config.server_url} />
         </div>
@@ -289,6 +317,16 @@ export function ServerSettings({
             </button>
             {config.auth_method === "password" && (
               <button
+                onClick={testSession}
+                disabled={testing}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
+              >
+                {testing ? <Loader2 size={16} className="animate-spin" /> : <Plug size={16} />}
+                Test Session
+              </button>
+            )}
+            {config.auth_method === "password" && (
+              <button
                 onClick={disconnect}
                 className="inline-flex items-center gap-2 rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
               >
@@ -347,10 +385,17 @@ export function ServerSettings({
           className={`rounded-lg border p-3 text-sm ${
             result.authenticated
               ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-900/30 dark:text-emerald-200"
-              : "border-immich-200 bg-immich-50 text-immich-800 dark:border-immich-900 dark:bg-immich-900/30 dark:text-immich-200"
+              : "border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-900/30 dark:text-red-200"
           }`}
         >
-          <p className="font-medium">{result.message}</p>
+          <p className="font-medium">
+            {result.message}
+            {result.authenticated && result.is_admin && (
+              <span className="ml-1.5 inline-flex items-center rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300">
+                admin
+              </span>
+            )}
+          </p>
           <p className="mt-1 text-xs opacity-80">
             {result.version && `Immich v${result.version}`}
             {result.user_email && ` · ${result.user_email}`}

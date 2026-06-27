@@ -274,6 +274,7 @@ impl ImmichClient {
                     authenticated: false,
                     version: None,
                     user_email: None,
+                    is_admin: false,
                     insecure,
                     message: "Server is not reachable".into(),
                 };
@@ -288,6 +289,7 @@ impl ImmichClient {
                 authenticated: true,
                 version,
                 user_email: Some(user.email),
+                is_admin: user.is_admin,
                 insecure,
                 message: "Connected".into(),
             },
@@ -296,6 +298,7 @@ impl ImmichClient {
                 authenticated: false,
                 version,
                 user_email: None,
+                is_admin: false,
                 insecure,
                 message: format!("Authentication failed: {e}"),
             },

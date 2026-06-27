@@ -154,6 +154,13 @@ pub async fn login_with_password(
             .await
             .map_err(map_err)?;
 
+    log::info!(
+        "password login successful for {} (user id {}, admin = {})",
+        login.user_email,
+        login.user_id,
+        login.is_admin
+    );
+
     keychain::set_login_credentials(&email, &password, &login.access_token)
         .map_err(map_err)?;
 
@@ -172,6 +179,7 @@ pub async fn login_with_password(
         authenticated: true,
         version: None,
         user_email: Some(login.user_email),
+        is_admin: login.is_admin,
         insecure: url.starts_with("http://"),
         message: format!("Logged in as {}", login.name),
     })
@@ -205,6 +213,7 @@ pub async fn get_connection_info(engine: State<'_, SyncEngine>) -> CmdResult<Con
             authenticated: false,
             version: None,
             user_email: None,
+            is_admin: false,
             insecure: false,
             message: "Not configured".into(),
         }),

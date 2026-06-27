@@ -36,6 +36,7 @@ export interface ConnectionInfo {
   authenticated: boolean;
   version: string | null;
   user_email: string | null;
+  is_admin: boolean;
   insecure: boolean;
   message: string;
 }
