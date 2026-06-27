@@ -4,6 +4,8 @@
 //! configured threshold, and whose byte-identical copy is confirmed present
 //! (and not trashed) on the Immich server.
 
+use std::collections::HashSet;
+
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize)]
@@ -54,4 +56,85 @@ pub struct FreeableScan {
     /// Total candidate files (known after the gather phase).
     pub total: usize,
     pub items: Vec<FreeableItem>,
+}
+
+/// Partition `requested` paths into (allowed, rejected) based on the scan
+/// allowlist. Rejected paths get an error message appended to `errors`.
+pub fn enforce_allowlist(
+    requested: Vec<String>,
+    scan_items: &[FreeableItem],
+    errors: &mut Vec<String>,
+) -> Vec<String> {
+    let allowed: HashSet<&str> = scan_items.iter().map(|i| i.path.as_str()).collect();
+    let (ok, rejected): (Vec<String>, Vec<String>) =
+        requested.into_iter().partition(|p| allowed.contains(p.as_str()));
+    for p in rejected {
+        errors.push(format!(
+            "{p}: not confirmed by the last scan — re-scan first"
+        ));
+    }
+    ok
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn item(path: &str) -> FreeableItem {
+        FreeableItem {
+            path: path.to_string(),
+            size: 1000,
+            mtime: 0,
+            asset_id: Some("asset-1".into()),
+        }
+    }
+
+    #[test]
+    fn allowlist_permits_scanned_paths() {
+        let scan = vec![item("/photos/a.jpg"), item("/photos/b.jpg")];
+        let mut errors = Vec::new();
+        let ok = enforce_allowlist(
+            vec!["/photos/a.jpg".into(), "/photos/b.jpg".into()],
+            &scan,
+            &mut errors,
+        );
+        assert_eq!(ok, vec!["/photos/a.jpg", "/photos/b.jpg"]);
+        assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn allowlist_rejects_unscanned_paths() {
+        let scan = vec![item("/photos/a.jpg")];
+        let mut errors = Vec::new();
+        let ok = enforce_allowlist(
+            vec!["/photos/a.jpg".into(), "/etc/passwd".into(), "/photos/evil.jpg".into()],
+            &scan,
+            &mut errors,
+        );
+        assert_eq!(ok, vec!["/photos/a.jpg"]);
+        assert_eq!(errors.len(), 2);
+        assert!(errors[0].contains("/etc/passwd"));
+        assert!(errors[1].contains("/photos/evil.jpg"));
+    }
+
+    #[test]
+    fn allowlist_rejects_all_when_no_scan() {
+        let mut errors = Vec::new();
+        let ok = enforce_allowlist(
+            vec!["/photos/a.jpg".into()],
+            &[],
+            &mut errors,
+        );
+        assert!(ok.is_empty());
+        assert_eq!(errors.len(), 1);
+    }
+
+    #[test]
+    fn allowlist_returns_empty_on_empty_request() {
+        let scan = vec![item("/photos/a.jpg")];
+        let mut errors = Vec::new();
+        let ok = enforce_allowlist(vec![], &scan, &mut errors);
+        assert!(ok.is_empty());
+        assert!(errors.is_empty());
+    }
 }

@@ -27,10 +27,7 @@ pub struct ConfigDto {
 #[tauri::command]
 pub async fn get_config(engine: State<'_, SyncEngine>) -> CmdResult<ConfigDto> {
     let config = engine.current_config().await;
-    let has_api_key = keychain::get_api_key()
-        .map_err(map_err)?
-        .map(|k| !k.is_empty())
-        .unwrap_or(false);
+    let has_api_key = engine.has_api_key().await;
     Ok(ConfigDto {
         config,
         has_api_key,

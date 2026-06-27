@@ -143,3 +143,9 @@ export interface UpdateInfo {
   current_version: string | null;
   notes: string | null;
 }
+
+export interface UpdateProgress {
+  downloaded: number;
+  total: number | null;
+  pct: number;
+}

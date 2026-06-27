@@ -429,25 +429,27 @@ impl Db {
     /// Aggregate counts + last-upload time for the overview dashboard.
     pub fn history_stats(&self) -> Result<HistoryStats> {
         let conn = self.conn()?;
-        let count = |status: &str| -> Result<i64> {
-            Ok(conn.query_row(
-                "SELECT COUNT(*) FROM upload_history WHERE status = ?1",
-                params![status],
-                |r| r.get(0),
-            )?)
-        };
-        let total: i64 =
-            conn.query_row("SELECT COUNT(*) FROM upload_history", [], |r| r.get(0))?;
-        let last_uploaded_at: Option<i64> =
-            conn.query_row("SELECT MAX(uploaded_at) FROM upload_history", [], |r| r.get(0))?;
-        Ok(HistoryStats {
-            total,
-            success: count(status::SUCCESS)?,
-            duplicate: count(status::DUPLICATE)?,
-            skipped: count(status::SKIPPED)?,
-            failed: count(status::FAILED)?,
-            last_uploaded_at,
-        })
+        conn.query_row(
+            "SELECT COUNT(*),
+                    SUM(CASE WHEN status = 'success'   THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN status = 'duplicate' THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN status = 'skipped'   THEN 1 ELSE 0 END),
+                    SUM(CASE WHEN status = 'failed'    THEN 1 ELSE 0 END),
+                    MAX(uploaded_at)
+             FROM upload_history",
+            [],
+            |r| {
+                Ok(HistoryStats {
+                    total: r.get(0)?,
+                    success: r.get::<_, Option<i64>>(1)?.unwrap_or(0),
+                    duplicate: r.get::<_, Option<i64>>(2)?.unwrap_or(0),
+                    skipped: r.get::<_, Option<i64>>(3)?.unwrap_or(0),
+                    failed: r.get::<_, Option<i64>>(4)?.unwrap_or(0),
+                    last_uploaded_at: r.get(5)?,
+                })
+            },
+        )
+        .context("querying history stats")
     }
 
     /// Recent history, newest first. `status` filters to one status when given.

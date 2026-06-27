@@ -3,6 +3,7 @@
 //! Non-secret settings are stored as JSON under the OS config dir. The API key
 //! is *never* written here — it lives in the OS keychain (see `keychain` module).
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
@@ -12,7 +13,7 @@ const APP_DIR: &str = "immich-dock";
 const CONFIG_FILE: &str = "config.json";
 
 /// A single folder watched for new media.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct WatchedFolder {
     pub path: String,
     #[serde(default = "default_true")]
@@ -164,6 +165,16 @@ impl AppConfig {
         Ok(())
     }
 
+    /// Precomputed lowercase extension set for O(1) lookups in scan loops.
+    /// Callers processing many files should build this once and call
+    /// `matches_filter_with` instead of `matches_filter`.
+    pub fn extension_set(&self) -> HashSet<String> {
+        self.include_extensions
+            .iter()
+            .map(|e| e.to_lowercase())
+            .collect()
+    }
+
     /// Returns true if `path` matches the include-extension filter.
     pub fn matches_filter(&self, path: &std::path::Path) -> bool {
         if self.include_extensions.is_empty() {
@@ -174,6 +185,17 @@ impl AppConfig {
                 let ext = ext.to_lowercase();
                 self.include_extensions.iter().any(|e| e.to_lowercase() == ext)
             }
+            None => false,
+        }
+    }
+
+    /// Like `matches_filter`, but uses a pre-built extension set for hot loops.
+    pub fn matches_filter_with(&self, path: &std::path::Path, set: &HashSet<String>) -> bool {
+        if set.is_empty() && self.include_extensions.is_empty() {
+            return true;
+        }
+        match path.extension().and_then(|e| e.to_str()) {
+            Some(ext) => set.contains(&ext.to_lowercase()),
             None => false,
         }
     }

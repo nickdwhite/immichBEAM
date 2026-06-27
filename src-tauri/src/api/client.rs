@@ -298,8 +298,13 @@ impl ImmichClient {
             .first_or_octet_stream()
             .to_string();
 
+        let now = std::time::SystemTime::now();
+        let modified = chrono::DateTime::<chrono::Utc>::from(
+            metadata.modified().unwrap_or(now),
+        )
+        .to_rfc3339();
         let created = chrono::DateTime::<chrono::Utc>::from(
-            metadata.modified().unwrap_or(std::time::SystemTime::now()),
+            metadata.created().or_else(|_| metadata.modified()).unwrap_or(now),
         )
         .to_rfc3339();
 
@@ -341,8 +346,8 @@ impl ImmichClient {
         let mut form = multipart::Form::new()
             .text("deviceAssetId", device_asset_id)
             .text("deviceId", device_id.to_string())
-            .text("fileCreatedAt", created.clone())
-            .text("fileModifiedAt", created)
+            .text("fileCreatedAt", created)
+            .text("fileModifiedAt", modified)
             .text("isFavorite", "false")
             .part("assetData", part);
 

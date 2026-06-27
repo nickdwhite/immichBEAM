@@ -202,6 +202,7 @@ impl SyncEngine {
     /// Initial scan of all enabled folders.
     pub async fn scan_all(&self) {
         let folders = self.enabled_folders().await;
+        let ext_set = self.inner.config.lock().await.extension_set();
         let (mut queued, mut already, mut filtered, mut content_skipped) = (0, 0, 0, 0);
         for folder in folders {
             // Walk the tree off the async runtime so we don't block a worker.
@@ -211,7 +212,7 @@ impl SyncEngine {
             for path in files {
                 let matched = {
                     let cfg = self.inner.config.lock().await;
-                    cfg.matches_filter(&path)
+                    cfg.matches_filter_with(&path, &ext_set)
                 };
                 if !matched {
                     filtered += 1;
@@ -716,12 +717,13 @@ impl SyncEngine {
         use crate::sync::cleanup::FolderInspect;
         let folder = PathBuf::from(path);
         let cfg = self.inner.config.lock().await.clone();
+        let ext_set = cfg.extension_set();
         let mut info = FolderInspect::default();
         let files = tokio::task::spawn_blocking(move || scan_folder(&folder))
             .await
             .unwrap_or_default();
         for file in files {
-            if !cfg.matches_filter(&file) {
+            if !cfg.matches_filter_with(&file, &ext_set) {
                 continue;
             }
             if let Ok(meta) = std::fs::metadata(&file) {
@@ -891,9 +893,17 @@ impl SyncEngine {
         self.push_status().await;
     }
 
-    /// Apply a new configuration: rebuild the client, restart the watcher,
-    /// update bandwidth, and rescan.
+    /// Apply a new configuration: rebuild the client, restart the watcher
+    /// (only if folder/filter/server settings changed), update bandwidth, etc.
     pub async fn apply_config(&self, new_config: AppConfig) {
+        let needs_rescan = {
+            let old = self.inner.config.lock().await;
+            old.server_url != new_config.server_url
+                || old.allow_insecure != new_config.allow_insecure
+                || old.folders != new_config.folders
+                || old.include_extensions != new_config.include_extensions
+        };
+
         self.inner
             .bandwidth
             .set_limit_kbps(new_config.bandwidth_limit_kbps);
@@ -912,13 +922,16 @@ impl SyncEngine {
             *cfg = new_config;
             let _ = cfg.save();
         }
-        // A new server/insecure setting may need a fresh pin captured.
-        self.ensure_cert_pinned().await;
-        // Restart watcher against the new folder set.
-        let (tx, rx) = mpsc::unbounded_channel::<FileEvent>();
-        self.start_watcher(tx).await;
-        self.spawn_ingest(rx);
-        self.scan_all().await;
+
+        if needs_rescan {
+            // A new server/insecure setting may need a fresh pin captured.
+            self.ensure_cert_pinned().await;
+            // Restart watcher against the new folder set.
+            let (tx, rx) = mpsc::unbounded_channel::<FileEvent>();
+            self.start_watcher(tx).await;
+            self.spawn_ingest(rx);
+            self.scan_all().await;
+        }
         self.push_status().await;
     }
 
@@ -987,6 +1000,16 @@ impl SyncEngine {
     /// Update the in-memory cached API key (mirrors a keychain write/delete).
     pub async fn set_api_key(&self, key: Option<String>) {
         *self.inner.api_key.lock().await = key;
+    }
+
+    /// Whether an API key is cached (without touching the OS keychain).
+    pub async fn has_api_key(&self) -> bool {
+        self.inner
+            .api_key
+            .lock()
+            .await
+            .as_ref()
+            .is_some_and(|k| !k.is_empty())
     }
 
     pub async fn current_config(&self) -> AppConfig {
@@ -1059,6 +1082,7 @@ impl SyncEngine {
         };
         let cutoff = chrono::Utc::now().timestamp() - (older_than_days as i64 * 86_400);
         let folders = self.enabled_folders().await;
+        let ext_set = self.inner.config.lock().await.extension_set();
 
         // Gather candidates, reusing the cached hash when the file is unchanged
         // so we don't re-read already-synced files from disk.
@@ -1070,7 +1094,7 @@ impl SyncEngine {
                 .await
                 .unwrap_or_default();
             for path in files {
-                let matched = self.inner.config.lock().await.matches_filter(&path);
+                let matched = self.inner.config.lock().await.matches_filter_with(&path, &ext_set);
                 if !matched {
                     continue;
                 }
@@ -1165,24 +1189,16 @@ impl SyncEngine {
     /// the audit table. On macOS this uses NSFileManager (silent + fast) and a
     /// single batched move, instead of scripting Finder once per file.
     pub async fn free_space(&self, paths: Vec<String>) -> crate::sync::cleanup::FreeResult {
-        use crate::sync::cleanup::FreeResult;
-        use std::collections::HashSet;
+        use crate::sync::cleanup::{enforce_allowlist, FreeResult};
         let mut result = FreeResult::default();
 
         // Safety: only files the last scan confirmed freeable (synced + not
         // trashed on the server) may be trashed, so a path arriving from the UI
         // can never be used to delete arbitrary files.
-        let allowed: HashSet<String> = {
+        let paths = {
             let st = self.inner.freeable.lock().await;
-            st.items.iter().map(|i| i.path.clone()).collect()
+            enforce_allowlist(paths, &st.items, &mut result.errors)
         };
-        let (paths, rejected): (Vec<String>, Vec<String>) =
-            paths.into_iter().partition(|p| allowed.contains(p));
-        for p in rejected {
-            result
-                .errors
-                .push(format!("{p}: not confirmed by the last scan — re-scan first"));
-        }
         if paths.is_empty() {
             return result;
         }
@@ -1544,5 +1560,92 @@ mod tests {
             hex_to_bytes("a9993e364706816aba3e25717850c26c9cd0d89d").len(),
             20
         );
+    }
+
+    #[test]
+    fn paired_live_video_finds_sibling_mov() {
+        let dir = std::env::temp_dir().join("immich_live_test");
+        let _ = std::fs::create_dir_all(&dir);
+        let still = dir.join("IMG_1234.heic");
+        let video = dir.join("IMG_1234.mov");
+        std::fs::write(&still, b"fake").unwrap();
+        std::fs::write(&video, b"fake").unwrap();
+
+        assert_eq!(paired_live_video(&still), Some(video.clone()));
+        // Video files don't pair with other videos.
+        assert_eq!(paired_live_video(&video), None);
+        // Non-image file returns None.
+        assert_eq!(paired_live_video(&dir.join("notes.txt")), None);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn paired_live_still_finds_sibling_heic() {
+        let dir = std::env::temp_dir().join("immich_live_test2");
+        let _ = std::fs::create_dir_all(&dir);
+        let still = dir.join("IMG_5678.heic");
+        let video = dir.join("IMG_5678.mov");
+        std::fs::write(&still, b"fake").unwrap();
+        std::fs::write(&video, b"fake").unwrap();
+
+        assert_eq!(paired_live_still(&video), Some(still.clone()));
+        // Image files don't pair with other images.
+        assert_eq!(paired_live_still(&still), None);
+        // Non-video file returns None.
+        assert_eq!(paired_live_still(&dir.join("doc.pdf")), None);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn paired_live_video_returns_none_when_no_sibling() {
+        let dir = std::env::temp_dir().join("immich_live_test3");
+        let _ = std::fs::create_dir_all(&dir);
+        let still = dir.join("solo.jpg");
+        std::fs::write(&still, b"fake").unwrap();
+        // No .mov/.mp4 sibling exists.
+        assert_eq!(paired_live_video(&still), None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn find_sidecar_prefers_appended_extension() {
+        let dir = std::env::temp_dir().join("immich_sidecar_test");
+        let _ = std::fs::create_dir_all(&dir);
+        let photo = dir.join("photo.dng");
+        let appended = dir.join("photo.dng.xmp");
+        let replaced = dir.join("photo.xmp");
+        std::fs::write(&photo, b"raw").unwrap();
+        std::fs::write(&appended, b"xmp1").unwrap();
+        std::fs::write(&replaced, b"xmp2").unwrap();
+
+        // Appended form (photo.dng.xmp) takes priority.
+        assert_eq!(find_sidecar(&photo), Some(appended));
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn find_sidecar_falls_back_to_replaced() {
+        let dir = std::env::temp_dir().join("immich_sidecar_test2");
+        let _ = std::fs::create_dir_all(&dir);
+        let photo = dir.join("photo.dng");
+        let replaced = dir.join("photo.xmp");
+        std::fs::write(&photo, b"raw").unwrap();
+        std::fs::write(&replaced, b"xmp").unwrap();
+        // No appended form → falls back to photo.xmp.
+        assert_eq!(find_sidecar(&photo), Some(replaced));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn find_sidecar_returns_none_when_absent() {
+        let dir = std::env::temp_dir().join("immich_sidecar_test3");
+        let _ = std::fs::create_dir_all(&dir);
+        let photo = dir.join("photo.jpg");
+        std::fs::write(&photo, b"img").unwrap();
+        assert_eq!(find_sidecar(&photo), None);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "immich-dock v0.1.0",
+        "title": "immich-dock v0.3.1",
         "width": 900,
         "height": 600,
         "minWidth": 700,
@@ -51,7 +51,7 @@
         "language": ["en-US"]
       },
       "nsis": {
-        "installMode": "perMachine"
+        "installMode": "currentUser"
       }
     },
     "linux": {

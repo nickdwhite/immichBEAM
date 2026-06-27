@@ -17,6 +17,7 @@ import type {
   RepairReport,
   SyncStatus,
   UpdateInfo,
+  UpdateProgress,
 } from "../types";
 
 // ---- commands -----------------------------------------------------------
@@ -89,6 +90,7 @@ export const events = {
   PROGRESS: "sync://progress",
   PROGRESS_DONE: "sync://progress-done",
   FREEABLE: "freeable://updated",
+  UPDATE_PROGRESS: "update://progress",
 } as const;
 
 export function onStatus(cb: (s: SyncStatus) => void): Promise<UnlistenFn> {
@@ -113,4 +115,8 @@ export function onProgressDone(cb: (id: string) => void): Promise<UnlistenFn> {
 
 export function onFreeableChanged(cb: () => void): Promise<UnlistenFn> {
   return listen(events.FREEABLE, () => cb());
+}
+
+export function onUpdateProgress(cb: (p: UpdateProgress) => void): Promise<UnlistenFn> {
+  return listen<UpdateProgress>(events.UPDATE_PROGRESS, (e) => cb(e.payload));
 }

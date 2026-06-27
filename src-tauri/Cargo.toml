@@ -48,7 +48,6 @@ notify-debouncer-full = "0.3"
 # Hashing
 sha1 = "0.10"
 sha2 = "0.10"   # SHA-256 fingerprints of pinned certificates
-blake3 = "1"
 
 # Logging
 log = "0.4"
@@ -59,8 +58,6 @@ uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
 dirs = "5"
 anyhow = "1"
-thiserror = "1"
-async-trait = "0.1"
 futures = "0.3"
 tokio-util = { version = "0.7", features = ["full"] }
 regex = "1"
@@ -68,7 +65,6 @@ walkdir = "2"
 glob = "0.3"
 mime_guess = "2"
 base64 = "0.22"
-rand = "0.8"
 
 # System info for device ID
 hostname = "0.4"
@@ -88,7 +84,6 @@ tokio = { version = "1", features = ["full", "test-util"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # Windows-specific
-winreg = "0.52"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # Linux-specific
