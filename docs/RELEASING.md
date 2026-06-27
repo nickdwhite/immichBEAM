@@ -62,6 +62,21 @@ GitHub-hosted runners are **free for public repositories** (private repos get a
 monthly free-minutes allowance). You do **not** need any developer account to
 build or distribute unsigned installers.
 
+## Private repo mode
+
+If you keep the source repository **private**, GitHub Actions can still build
+draft releases and attach installers for manual testing and distribution.
+
+For now, keep desktop updates **manual** in that setup:
+
+- push tags or run `release.yml` manually
+- let GitHub Actions build the installers
+- download/install artifacts from the draft or published Release page
+
+Do **not** enable the shipped in-app updater against private GitHub Release
+assets unless you also add an authenticated update endpoint or proxy. The app
+cannot anonymously fetch private `latest.json` / installer assets.
+
 ## Signing & notarization (optional)
 
 Signing is *not required to build or distribute* — it only removes the OS
@@ -81,6 +96,9 @@ release workflow (Apple notarization vars / Windows cert), and the
 
 `tauri-plugin-updater` is included but disabled. To enable later: generate a
 signing keypair (`pnpm tauri signer generate`), add the public key and update
-endpoint to `tauri.conf.json`, re-add `updater:default` to
-`src-tauri/capabilities/default.json`, and have the release workflow publish the
-update manifest. Until then, updates are manual (download the new installer).
+endpoint to `tauri.conf.json`, and have the release workflow publish the update
+manifest. If your code and release artifacts stay in a private GitHub repo,
+leave in-app updates disabled and keep using manual installer downloads until
+you have a public or authenticated update feed.
+Release-only secret names and the local placeholder-file pattern are documented
+in `docs/RELEASE_SECRETS.md`.

@@ -40,8 +40,9 @@ Built with **Tauri 2**, **React 19 + TypeScript**, and a **Rust** backend.
   history with status filtering and per-row retry, and a log viewer.
 - First-run onboarding, toast feedback, light/dark/system theme, and a
   keyboard-accessible UI.
-- In-app **auto-update** (Tauri updater, minisign-signed) and CI that packages
-  macOS, Windows, and Linux installers (see `docs/RELEASING.md`).
+- CI that packages macOS, Windows, and Linux installers, plus in-app
+  **auto-update** wiring for a future public/authenticated update feed (see
+  `docs/RELEASING.md`).
 
 Built on an r2d2 SQLite connection pool (WAL) and reqwest 0.13. See
 `docs/SECURITY_REVIEW.md` for the security posture and `CHANGELOG.md` for
@@ -97,10 +98,10 @@ Produces `.dmg` (macOS), `.msi`/NSIS (Windows), and `.deb`/`.AppImage` (Linux).
 
 ## Notes
 
-- Auto-update is fully wired (Rust-side, no extra IPC capability). To activate
-  it for releases, generate a minisign key, set `plugins.updater.pubkey` and the
-  Releases `endpoint` in `tauri.conf.json`, and add the private key as a GitHub
-  Actions secret. Step-by-step in `docs/RELEASING.md`.
+- In the current private-repo setup, updates are manual: download installers
+  from GitHub Release assets. The in-app updater wiring is present, but should
+  stay disabled until releases move to a public feed or an authenticated update
+  endpoint. Step-by-step in `docs/RELEASING.md`.
 - The app icon and tray icons are generated from the brand artwork in `design/`
   (`design/logo-master.png` via `design/generate_logo.py` /
   `generate_state_icons.py`, then `pnpm tauri icon`). See `design/README.md`.
