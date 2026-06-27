@@ -3,7 +3,7 @@
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
-use crate::api::{Album, ConnectionInfo, ImmichClient};
+use crate::api::{Album, ConnectionInfo, ImmichClient, ServerFeatures};
 use crate::config::{AppConfig, WatchedFolder};
 use crate::db::{HistoryItem, QueueItem};
 use crate::keychain;
@@ -53,6 +53,17 @@ pub async fn test_connection(
     // (re)captured by the engine after the settings are saved and applied.
     let client = ImmichClient::new(&url, &key, allow_insecure, None).map_err(map_err)?;
     Ok(client.validate().await)
+}
+
+/// Probe a server for optional auth capabilities (OAuth/SSO) without
+/// persisting anything. Hits the unauthenticated `GET /api/server/features`.
+#[tauri::command]
+pub async fn check_server_features(
+    url: String,
+    allow_insecure: bool,
+) -> CmdResult<ServerFeatures> {
+    let client = ImmichClient::new(&url, "", allow_insecure, None).map_err(map_err)?;
+    client.server_features().await.map_err(map_err)
 }
 
 /// Persist server settings: store the API key in the keychain (if provided) and

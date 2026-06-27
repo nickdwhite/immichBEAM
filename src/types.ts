@@ -11,6 +11,11 @@ export type ConflictPolicy = "reupload" | "skip";
 
 export type AuthMethodConfig = "api_key" | "password";
 
+export interface ServerFeatures {
+  oauth: boolean;
+  password_login: boolean;
+}
+
 export interface AppConfig {
   server_url: string;
   allow_insecure: boolean;

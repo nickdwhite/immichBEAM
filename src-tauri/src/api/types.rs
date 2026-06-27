@@ -23,6 +23,16 @@ impl std::fmt::Display for ServerVersion {
     }
 }
 
+/// Selected fields from `GET /api/server/features` (unauthenticated). Used to
+/// discover whether the server advertises optional auth methods like OAuth/SSO.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ServerFeatures {
+    #[serde(rename = "oauth", default)]
+    pub oauth: bool,
+    #[serde(rename = "passwordLogin", default)]
+    pub password_login: bool,
+}
+
 /// Response of `GET /api/users/me`.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct UserResponse {

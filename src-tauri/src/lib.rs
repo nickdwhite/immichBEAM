@@ -115,6 +115,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_config,
             commands::test_connection,
+            commands::check_server_features,
             commands::save_server,
             commands::save_config,
             commands::add_folder,

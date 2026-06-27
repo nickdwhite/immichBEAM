@@ -250,6 +250,19 @@ impl ImmichClient {
         Ok(resp.json().await?)
     }
 
+    /// `GET /api/server/features` (no auth) — discovers optional capabilities
+    /// such as OAuth/SSO. Used by the "Detect SSO" check before deciding to
+    /// offer the full OAuth login flow.
+    pub async fn server_features(&self) -> Result<ServerFeatures> {
+        let resp = self
+            .http
+            .get(self.url("/api/server/features"))
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(resp.json().await?)
+    }
+
     /// `GET /api/users/me` — validates the current auth credentials.
     pub async fn me(&self) -> Result<UserResponse> {
         let resp = self

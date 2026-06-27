@@ -15,6 +15,7 @@ import type {
   ProgressPayload,
   QueueItem,
   RepairReport,
+  ServerFeatures,
   SyncStatus,
   UpdateInfo,
   UpdateProgress,
@@ -31,6 +32,9 @@ export const api = {
       apiKey,
       allowInsecure,
     }),
+
+  checkServerFeatures: (url: string, allowInsecure: boolean) =>
+    invoke<ServerFeatures>("check_server_features", { url, allowInsecure }),
 
   saveServer: (url: string, apiKey: string | null, allowInsecure: boolean) =>
     invoke<void>("save_server", { url, apiKey, allowInsecure }),

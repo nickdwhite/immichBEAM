@@ -8,13 +8,14 @@ import {
   LogOut,
   Plug,
   Save,
+  ScanSearch,
   ShieldCheck,
   UserRound,
 } from "lucide-react";
 import { api } from "../lib/tauri";
 import { SecurityBadge } from "./SecurityBadge";
 import { useToast } from "./Toast";
-import type { ConfigDto, ConnectionInfo } from "../types";
+import type { ConfigDto, ConnectionInfo, ServerFeatures } from "../types";
 
 type AuthTab = "api_key" | "password";
 
@@ -37,6 +38,8 @@ export function ServerSettings({
   const [result, setResult] = useState<ConnectionInfo | null>(null);
   const [conn, setConn] = useState<ConnectionInfo | null>(null);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
+  const [features, setFeatures] = useState<ServerFeatures | null>(null);
+  const [detecting, setDetecting] = useState(false);
   const toast = useToast();
 
   const isConfigured =
@@ -98,6 +101,27 @@ export function ServerSettings({
       toast.error(`Couldn't save server settings: ${e}`);
     } finally {
       setSaving(false);
+    }
+  };
+
+  /// Probe the server's unauthenticated /api/server/features to see whether it
+  /// advertises OAuth/SSO. Doesn't persist anything; decides whether offering
+  /// the full OAuth login flow is worthwhile for this server.
+  const detectSso = async () => {
+    setDetecting(true);
+    setFeatures(null);
+    try {
+      const f = await api.checkServerFeatures(url, allowInsecure);
+      setFeatures(f);
+      if (f.oauth) {
+        toast.success("This server advertises SSO (OAuth)");
+      } else {
+        toast.info("This server uses API key / password only (no SSO)");
+      }
+    } catch (e) {
+      toast.error(`Couldn't reach server: ${e}`);
+    } finally {
+      setDetecting(false);
     }
   };
 
@@ -200,6 +224,35 @@ export function ServerSettings({
           placeholder="http://192.168.2.119:2283"
           className="w-full rounded-lg border-slate-300 text-sm dark:border-slate-700 dark:bg-slate-800"
         />
+      </div>
+
+      <div>
+        <button
+          onClick={detectSso}
+          disabled={detecting || !url}
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
+        >
+          {detecting ? <Loader2 size={14} className="animate-spin" /> : <ScanSearch size={14} />}
+          Detect SSO / server capabilities
+        </button>
+        {features && (
+          <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+            {features.oauth ? (
+              <>
+                <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                  SSO (OAuth) is available
+                </span>{" "}
+                on this server — full OAuth login support is coming soon.
+              </>
+            ) : (
+              <>
+                <span className="font-medium">No SSO</span> — this server uses API
+                key / password authentication
+                {features.password_login ? "" : " (password login disabled)"}.
+              </>
+            )}
+          </p>
+        )}
       </div>
 
       {/* Auth method tabs */}
