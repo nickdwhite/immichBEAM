@@ -241,10 +241,11 @@ New feature ideas, partially inspired by reviewing
       password → we get a JWT bearer token → used for all API calls. Credentials
       stored in the OS keychain (`login-email`/`login-password`/`login-token`),
       ServerSettings offers API-Key / Email-Password tabs. ✅
-- [ ] **Automatic token refresh** — when the JWT bearer token expires (401),
-      re-login automatically using the stored email/password instead of
-      surfacing an auth error. `keychain::set_login_token` is already stubbed
-      for this; the 401 → re-login path in `sync/engine.rs` is not yet wired.
+- [x] **Automatic token refresh** — when the JWT bearer token expires (401),
+      the sync engine re-logs in transparently using the stored email/password
+      and swaps in the fresh bearer token. The refresh is serialized and
+      throttled (≥20 s apart) so a 401 storm across upload workers triggers at
+      most one re-login. `sync::engine::try_refresh_login`. ✅
 - [ ] **OAuth login** — support Immich's OAuth2 flow (`POST /oauth/authorize` →
       `POST /oauth/callback`) for servers configured with an external identity
       provider. Requires opening a browser for the authorization step and

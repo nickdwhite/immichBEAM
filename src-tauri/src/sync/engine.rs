@@ -76,6 +76,12 @@ struct Inner {
     /// Monitors for USB/SD card insertions.
     #[allow(dead_code)]
     removable: Mutex<Option<crate::sync::removable::RemovableMonitor>>,
+    /// Serializes bearer-token refresh attempts so a 401 storm triggers at
+    /// most one re-login across upload workers.
+    refresh_lock: Mutex<()>,
+    /// Timestamp (ms) of the last refresh attempt; throttles re-logins so a
+    /// persistently failing login isn't retried every loop.
+    last_refresh_ms: AtomicU64,
 }
 
 /// Cheaply-cloneable handle to the running engine.
@@ -124,6 +130,8 @@ impl SyncEngine {
             freeable: Mutex::new(Default::default()),
             album_flush: Mutex::new(()),
             removable: Mutex::new(Some(monitor)),
+            refresh_lock: Mutex::new(()),
+            last_refresh_ms: AtomicU64::new(0),
         });
         Self { inner }
     }
@@ -567,8 +575,9 @@ impl SyncEngine {
             Err(e) => {
                 log::warn!("duplicate-check failed for {filename}: {e}");
                 if e.is_auth() {
-                    *self.inner.last_error.lock().await =
-                        Some("Authentication failed — check your API key".into());
+                    if let AuthRecovery::Permanent(msg) = self.on_auth_error().await {
+                        *self.inner.last_error.lock().await = Some(msg);
+                    }
                 }
                 let db = &self.inner.db;
                 let _ = db.set_status(&item.id, status::PENDING);
@@ -655,14 +664,22 @@ impl SyncEngine {
 
                 // Retryable (network / 5xx / auth): requeue WITHOUT consuming a
                 // retry, so transient outages auto-resume. The dispatcher backs
-                // off via note_error().
+                // off via note_error(). On an auth error, attempt a transparent
+                // bearer-token refresh first (password auth only); if it recovers
+                // (or is already refreshing), retry quietly without surfacing an
+                // error string.
                 let friendly = if e.is_auth() {
-                    "Authentication failed — check your API key".to_string()
+                    match self.on_auth_error().await {
+                        AuthRecovery::Recovered => String::new(),
+                        AuthRecovery::Permanent(msg) => msg,
+                    }
                 } else {
                     format!("{filename}: {e}")
                 };
                 log::warn!("upload retryable error for {filename}: {e}");
-                *self.inner.last_error.lock().await = Some(friendly);
+                if !friendly.is_empty() {
+                    *self.inner.last_error.lock().await = Some(friendly);
+                }
                 let db = &self.inner.db;
                 let _ = db.set_status(&item.id, status::PENDING);
                 Err(ProcessError::Network)
@@ -1025,6 +1042,84 @@ impl SyncEngine {
         Some(crate::api::client::cert_fingerprint(&der))
     }
 
+    /// Called when an API request returned an auth error (401/403). For password
+    /// auth, transparently re-login using the stored credentials and swap in the
+    /// fresh bearer token, so a long-running background sync survives JWT expiry
+    /// instead of stalling until the user re-authenticates. API-key auth cannot
+    /// be refreshed this way, so it surfaces as a permanent error.
+    async fn on_auth_error(&self) -> AuthRecovery {
+        match self.try_refresh_login().await {
+            RefreshResult::Refreshed => {
+                log::info!("bearer token refreshed after auth error");
+                AuthRecovery::Recovered
+            }
+            // A refresh is already running (or throttled): just requeue; the
+            // dispatcher retries once the in-flight refresh swaps the client.
+            RefreshResult::AlreadyRunning => AuthRecovery::Recovered,
+            RefreshResult::NotPassword => {
+                AuthRecovery::Permanent("Authentication failed — check your API key".into())
+            }
+            RefreshResult::NoCredentials => {
+                AuthRecovery::Permanent("Session expired — please sign in again".into())
+            }
+            RefreshResult::Failed(msg) => AuthRecovery::Permanent(msg),
+        }
+    }
+
+    /// Attempt one bearer-token refresh. Throttled (≥20 s between attempts) and
+    /// serialized (only one at a time) so concurrent 401s from multiple upload
+    /// workers cause at most a single re-login.
+    async fn try_refresh_login(&self) -> RefreshResult {
+        const REFRESH_THROTTLE_MS: u64 = 20_000;
+
+        // Only one refresh at a time; concurrent callers fall back to "retry".
+        let _guard = match self.inner.refresh_lock.try_lock() {
+            Ok(g) => g,
+            Err(_) => return RefreshResult::AlreadyRunning,
+        };
+
+        // Throttle: don't re-attempt a (likely-failing) login too often.
+        let now = now_ms();
+        let last = self.inner.last_refresh_ms.load(Ordering::Relaxed);
+        if now.saturating_sub(last) < REFRESH_THROTTLE_MS {
+            return RefreshResult::AlreadyRunning;
+        }
+        self.inner.last_refresh_ms.store(now, Ordering::Relaxed);
+
+        let cfg = self.inner.config.lock().await.clone();
+        if cfg.auth_method != AuthMethodConfig::Password {
+            return RefreshResult::NotPassword;
+        }
+
+        // Reuse the pinned cert (TOFU) for the login handshake when present.
+        let pinned = decode_pinned_cert(cfg.pinned_cert.as_deref());
+        let (email, password, _old_token) = match crate::keychain::get_login_credentials()
+            .ok()
+            .flatten()
+        {
+            Some(c) => c,
+            None => return RefreshResult::NoCredentials,
+        };
+
+        match ImmichClient::login(&cfg.server_url, &email, &password, cfg.allow_insecure, pinned)
+            .await
+        {
+            Ok((client, login)) => {
+                if let Err(e) = crate::keychain::set_login_token(&login.access_token) {
+                    log::warn!("refreshed login but failed to persist token: {e}");
+                }
+                *self.inner.client.lock().await = Some(client);
+                *self.inner.last_error.lock().await = None;
+                RefreshResult::Refreshed
+            }
+            Err(e) => {
+                let msg = format!("Session expired — re-login failed: {e}");
+                log::warn!("{msg}");
+                RefreshResult::Failed(msg)
+            }
+        }
+    }
+
     /// Update the in-memory cached API key (mirrors a keychain write/delete).
     pub async fn set_api_key(&self, key: Option<String>) {
         *self.inner.api_key.lock().await = key;
@@ -1358,6 +1453,23 @@ enum ProcessError {
     Upload,
     /// Upload aborted because the user paused; item left pending for resume.
     Paused,
+}
+
+/// Outcome of attempting to recover from an auth error.
+enum AuthRecovery {
+    /// Token refreshed (or a refresh is already in progress) — retry quietly.
+    Recovered,
+    /// Auth is unrecoverable; carry the human-readable reason to the UI.
+    Permanent(String),
+}
+
+/// Outcome of a bearer-token refresh attempt.
+enum RefreshResult {
+    Refreshed,
+    AlreadyRunning,
+    NotPassword,
+    NoCredentials,
+    Failed(String),
 }
 
 fn build_client(cfg: &AppConfig, api_key: Option<&str>) -> Option<ImmichClient> {
