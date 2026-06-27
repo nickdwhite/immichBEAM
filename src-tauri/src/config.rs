@@ -21,10 +21,27 @@ pub struct WatchedFolder {
     /// Optional album id that uploads from this folder are added to.
     #[serde(default)]
     pub album_id: Option<String>,
+    /// Watch subfolders recursively (default: true).
+    #[serde(default = "default_true")]
+    pub recursive: bool,
 }
 
 fn default_true() -> bool {
     true
+}
+
+/// What to do when a file changes on disk after having been uploaded.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConflictPolicy {
+    Reupload,
+    Skip,
+}
+
+impl Default for ConflictPolicy {
+    fn default() -> Self {
+        Self::Reupload
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,6 +96,10 @@ pub struct AppConfig {
     /// Show desktop notifications (e.g. on permanent upload failures).
     #[serde(default = "default_true")]
     pub notifications_enabled: bool,
+
+    /// What to do when a previously-uploaded file changes on disk.
+    #[serde(default)]
+    pub conflict_policy: ConflictPolicy,
 }
 
 /// The full set of asset extensions Immich accepts (images + videos), mirroring
@@ -121,6 +142,7 @@ impl Default for AppConfig {
             paused: false,
             debug_logging: false,
             notifications_enabled: true,
+            conflict_policy: ConflictPolicy::default(),
         }
     }
 }
@@ -206,7 +228,7 @@ fn generate_device_id() -> String {
         .ok()
         .and_then(|h| h.into_string().ok())
         .unwrap_or_else(|| "unknown-host".into());
-    format!("dock-{host}-{}", uuid::Uuid::new_v4())
+    format!("beam-{host}-{}", uuid::Uuid::new_v4())
 }
 
 #[cfg(test)]

@@ -229,6 +229,18 @@ impl Db {
         }
     }
 
+    /// Returns true if this path was ever hashed (i.e. previously uploaded),
+    /// regardless of whether the file has since changed.
+    pub fn was_previously_synced(&self, path: &str) -> Result<bool> {
+        let conn = self.conn()?;
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM file_hashes WHERE path = ?1",
+            params![path],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
     pub fn put_hash(&self, path: &str, sha1: &str, size: i64, mtime: i64) -> Result<()> {
         let conn = self.conn()?;
         conn.execute(

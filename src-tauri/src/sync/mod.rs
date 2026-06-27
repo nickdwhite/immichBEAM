@@ -4,6 +4,7 @@ pub mod cleanup;
 pub mod engine;
 pub mod hasher;
 pub mod queue;
+pub mod removable;
 pub mod watcher;
 
 pub use engine::SyncEngine;

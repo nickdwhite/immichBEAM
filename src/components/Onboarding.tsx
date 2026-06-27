@@ -1,4 +1,6 @@
-import { Check, ChevronRight, Circle } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, ChevronRight, Circle, FolderPlus } from "lucide-react";
+import { api } from "../lib/tauri";
 import type { ConfigDto } from "../types";
 import type { Tab } from "./Sidebar";
 
@@ -6,13 +8,37 @@ import type { Tab } from "./Sidebar";
 export function Onboarding({
   config,
   onNavigate,
+  onSaved,
 }: {
   config: ConfigDto;
   onNavigate: (t: Tab) => void;
+  onSaved: () => void;
 }) {
   const serverDone = config.has_api_key && !!config.server_url;
   const folderDone = config.folders.length > 0;
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [adding, setAdding] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (serverDone && !folderDone) {
+      api.suggestFolders().then(setSuggestions).catch(() => {});
+    }
+  }, [serverDone, folderDone]);
+
   if (serverDone && folderDone) return null;
+
+  const addSuggested = async (path: string) => {
+    setAdding(path);
+    try {
+      await api.addFolder(path);
+      setSuggestions((s) => s.filter((p) => p !== path));
+      onSaved();
+    } catch {
+      // Folder tab will show the error
+    } finally {
+      setAdding(null);
+    }
+  };
 
   const steps: { done: boolean; label: string; tab: Tab; cta: string }[] = [
     {
@@ -65,6 +91,34 @@ export function Onboarding({
           </li>
         ))}
       </ul>
+
+      {serverDone && !folderDone && suggestions.length > 0 && (
+        <div className="mt-3 border-t border-brand-200 pt-3 dark:border-brand-800">
+          <p className="mb-2 text-xs font-medium text-brand-700 dark:text-brand-300">
+            Suggested folders on this computer:
+          </p>
+          <ul className="space-y-1">
+            {suggestions.map((path) => (
+              <li
+                key={path}
+                className="flex items-center gap-2 rounded-md bg-white/60 px-2 py-1.5 text-xs dark:bg-slate-800/60"
+              >
+                <span className="min-w-0 flex-1 truncate font-mono text-slate-600 dark:text-slate-300">
+                  {path}
+                </span>
+                <button
+                  onClick={() => addSuggested(path)}
+                  disabled={adding !== null}
+                  className="inline-flex shrink-0 items-center gap-1 rounded bg-brand-600 px-2 py-0.5 text-[11px] font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+                >
+                  <FolderPlus size={12} />
+                  Add
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

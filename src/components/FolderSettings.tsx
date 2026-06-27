@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { FolderPlus, Loader2, Trash2, TriangleAlert } from "lucide-react";
+import { FolderPlus, FolderTree, Loader2, Trash2, TriangleAlert } from "lucide-react";
 import { api } from "../lib/tauri";
 import { fmtBytes } from "../lib/format";
 import { useToast } from "./Toast";
@@ -105,6 +105,21 @@ export function FolderSettings({
         ...config,
         folders: config.folders.map((f) =>
           f.path === path ? { ...f, enabled } : f,
+        ),
+      });
+      onSaved();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const toggleRecursive = async (path: string, recursive: boolean) => {
+    setBusy(true);
+    try {
+      await api.saveConfig({
+        ...config,
+        folders: config.folders.map((f) =>
+          f.path === path ? { ...f, recursive } : f,
         ),
       });
       onSaved();
@@ -254,6 +269,20 @@ export function FolderSettings({
                       : "…"}
                   </div>
                 </div>
+                <button
+                  onClick={() => toggleRecursive(f.path, !f.recursive)}
+                  disabled={busy}
+                  className={`shrink-0 rounded p-1 ${
+                    f.recursive
+                      ? "text-brand-600 dark:text-brand-400"
+                      : "text-slate-300 dark:text-slate-600"
+                  } hover:bg-slate-100 dark:hover:bg-slate-800`}
+                  title={f.recursive ? "Watching subfolders — click for top-level only" : "Top-level only — click to include subfolders"}
+                  aria-pressed={f.recursive}
+                  aria-label="Toggle recursive watching"
+                >
+                  <FolderTree size={16} />
+                </button>
                 <select
                   value={f.album_id ?? ""}
                   onChange={(e) => setAlbum(f.path, e.target.value)}

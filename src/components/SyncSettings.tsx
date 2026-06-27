@@ -3,7 +3,7 @@ import { disable, enable } from "@tauri-apps/plugin-autostart";
 import { Loader2, Save } from "lucide-react";
 import { api } from "../lib/tauri";
 import { useToast } from "./Toast";
-import type { ConfigDto } from "../types";
+import type { ConfigDto, ConflictPolicy } from "../types";
 
 export function SyncSettings({
   config,
@@ -17,6 +17,7 @@ export function SyncSettings({
   const [autostart, setAutostart] = useState(config.autostart);
   const [debug, setDebug] = useState(config.debug_logging);
   const [notifications, setNotifications] = useState(config.notifications_enabled);
+  const [conflictPolicy, setConflictPolicy] = useState<ConflictPolicy>(config.conflict_policy);
   const [saving, setSaving] = useState(false);
   const toast = useToast();
 
@@ -37,6 +38,7 @@ export function SyncSettings({
         autostart,
         debug_logging: debug,
         notifications_enabled: notifications,
+        conflict_policy: conflictPolicy,
       });
       onSaved();
       toast.success("Sync settings saved");
@@ -100,6 +102,23 @@ export function SyncSettings({
         />
         Show desktop notifications (e.g. when an upload fails)
       </label>
+
+      <div>
+        <label className="mb-1 block text-sm font-medium">
+          When a synced file changes
+        </label>
+        <select
+          value={conflictPolicy}
+          onChange={(e) => setConflictPolicy(e.target.value as ConflictPolicy)}
+          className="rounded-lg border-slate-300 text-sm dark:border-slate-700 dark:bg-slate-800"
+        >
+          <option value="reupload">Re-upload the new version</option>
+          <option value="skip">Skip (keep the original)</option>
+        </select>
+        <p className="mt-1 text-xs text-slate-400">
+          Applies when a file you&apos;ve already uploaded is modified on disk.
+        </p>
+      </div>
 
       <div>
         <label className="flex items-center gap-2 text-sm">

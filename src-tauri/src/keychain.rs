@@ -10,7 +10,7 @@
 use anyhow::{Context, Result};
 use keyring::Entry;
 
-const SERVICE: &str = "com.immichdock.desktop";
+const SERVICE: &str = "com.immichbeam.desktop";
 const ACCOUNT: &str = "api-key";
 
 fn entry() -> Result<Entry> {

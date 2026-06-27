@@ -50,17 +50,19 @@ export function Overview({
   config,
   status,
   onNavigate,
+  onSaved,
 }: {
   config: ConfigDto;
   status: SyncStatus;
   onNavigate: (t: Tab) => void;
+  onSaved: () => void;
 }) {
   const stats = useStats();
   const paused = status.state === "paused";
 
   return (
     <div className="space-y-6">
-      <Onboarding config={config} onNavigate={onNavigate} />
+      <Onboarding config={config} onNavigate={onNavigate} onSaved={onSaved} />
 
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
         <div className="space-y-1">

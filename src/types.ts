@@ -4,7 +4,10 @@ export interface WatchedFolder {
   path: string;
   enabled: boolean;
   album_id: string | null;
+  recursive: boolean;
 }
+
+export type ConflictPolicy = "reupload" | "skip";
 
 export interface AppConfig {
   server_url: string;
@@ -18,6 +21,7 @@ export interface AppConfig {
   paused: boolean;
   debug_logging: boolean;
   notifications_enabled: boolean;
+  conflict_policy: ConflictPolicy;
 }
 
 export interface ConfigDto extends AppConfig {

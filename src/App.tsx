@@ -1,6 +1,9 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { ExternalLink, Loader2 } from "lucide-react";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { listen } from "@tauri-apps/api/event";
+import { ExternalLink, Loader2, Usb, X } from "lucide-react";
+import { api } from "./lib/tauri";
 import { Sidebar, type Tab } from "./components/Sidebar";
 import { ActivityBar } from "./components/ActivityBar";
 import { Overview } from "./components/Overview";
@@ -32,6 +35,65 @@ function App() {
   const { config, loading, reload } = useConfig();
   const status = useStatus();
   const [tab, setTab] = useState<Tab>("overview");
+  const [dragOver, setDragOver] = useState(false);
+  const [removable, setRemovable] = useState<{
+    volume_name: string;
+    dcim_path: string;
+  } | null>(null);
+
+  useEffect(() => {
+    const unlisten = listen<{ volume_name: string; dcim_path: string }>(
+      "sync://removable-detected",
+      (event) => setRemovable(event.payload),
+    );
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
+  const addRemovable = useCallback(async () => {
+    if (!removable) return;
+    try {
+      await api.addFolder(removable.dcim_path);
+      reload();
+      setTab("folders");
+    } catch {
+      // ignored
+    }
+    setRemovable(null);
+  }, [removable, reload]);
+
+  const handleDrop = useCallback(
+    async (paths: string[]) => {
+      for (const p of paths) {
+        try {
+          await api.addFolder(p);
+        } catch {
+          // non-directory drops are silently ignored
+        }
+      }
+      reload();
+      setTab("folders");
+    },
+    [reload],
+  );
+
+  useEffect(() => {
+    const webview = getCurrentWebview();
+    const unlisten = webview.onDragDropEvent((event) => {
+      if (event.payload.type === "over") {
+        setDragOver(true);
+      } else if (event.payload.type === "drop") {
+        setDragOver(false);
+        handleDrop(event.payload.paths);
+      } else {
+        setDragOver(false);
+      }
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [handleDrop]);
 
   const openWeb = useMemo(
     () => () => {
@@ -50,7 +112,19 @@ function App() {
   }
 
   return (
-    <div className="flex h-full">
+    <div className="relative flex h-full">
+      {dragOver && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-brand-600/20 backdrop-blur-sm">
+          <div className="rounded-xl border-2 border-dashed border-brand-500 bg-white/90 px-8 py-6 text-center shadow-lg dark:bg-slate-900/90">
+            <p className="text-lg font-semibold text-brand-700 dark:text-brand-300">
+              Drop folder to add
+            </p>
+            <p className="mt-1 text-sm text-slate-500">
+              It will be added to your watched folders
+            </p>
+          </div>
+        </div>
+      )}
       <Sidebar tab={tab} onChange={setTab} status={status} />
 
       <main className="flex flex-1 flex-col overflow-hidden">
@@ -71,9 +145,32 @@ function App() {
 
         <ActivityBar status={status} />
 
+        {removable && (
+          <div className="flex items-center gap-3 border-b border-blue-200 bg-blue-50 px-6 py-2.5 dark:border-blue-900 dark:bg-blue-900/20">
+            <Usb size={18} className="shrink-0 text-blue-600" />
+            <p className="flex-1 text-sm text-blue-800 dark:text-blue-200">
+              <strong>{removable.volume_name}</strong> has a DCIM folder — sync
+              photos from this device?
+            </p>
+            <button
+              onClick={addRemovable}
+              className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700"
+            >
+              Add folder
+            </button>
+            <button
+              onClick={() => setRemovable(null)}
+              className="text-blue-400 hover:text-blue-600"
+              aria-label="Dismiss"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
+
         <section className="flex-1 overflow-auto p-6">
           {tab === "overview" && (
-            <Overview config={config} status={status} onNavigate={setTab} />
+            <Overview config={config} status={status} onNavigate={setTab} onSaved={reload} />
           )}
           {tab === "queue" && <QueueView status={status} />}
           {tab === "history" && <HistoryView />}

@@ -200,30 +200,37 @@ All phases (A–D) complete.
 New feature ideas, partially inspired by reviewing
 [ImmichSync](https://github.com/bees-roadhouse/immichsync/).
 
+### Watch behavior
+- [x] **Per-folder recursive toggle** — `WatchedFolder.recursive` flag
+      (default true), FolderTree icon toggle in Folders UI, watcher and
+      scanner honour the per-folder setting. ✅
+
 ### Upload & sync improvements
-- [ ] **Bandwidth throttling** — configurable upload rate limit (KB/s or MB/s)
-      so syncing doesn't saturate the user's connection. Sync settings UI.
-- [ ] **Network share fallback** — detect when `notify`'s native filesystem
-      watcher silently fails on NFS/SMB mounts and auto-switch to poll-based
-      watching with a configurable interval.
-- [ ] **Watcher health monitoring** — periodic probe to detect when a watcher
-      silently dies (network drop, mount disappears) and auto-restart it.
+- [x] **Bandwidth throttling** — token-bucket rate limiter in `queue.rs` +
+      KB/s slider in Sync Settings. ✅ (implemented earlier)
+- [x] **Network share fallback** — when `notify`'s native watcher fails on a
+      folder (NFS/SMB), `watcher.rs` automatically falls back to a 30-second
+      `PollWatcher` for that folder. ✅
+- [x] **Watcher health monitoring** — background `watcher-health` thread
+      probes every 60 s, logs warnings when a watched folder becomes
+      unreachable (mount dropped, etc.). ✅
 - [ ] **Batch duplicate checks** — group hash lookups into batch
       `bulk-upload-check` calls instead of per-item (deferred from §5, revisit
       if profiling shows the check is a bottleneck).
 
 ### Device & media detection
-- [ ] **USB / SD card auto-detection** — detect removable media insertion,
-      scan for DCIM folders (camera convention), and offer to sync.
-      Platform-specific: `WM_DEVICECHANGE` on Windows, `DiskArbitration` on
-      macOS, `udev`/`udisks2` on Linux.
-- [ ] **Auto-detect media folders** — on first run, suggest the user's
-      Pictures folder (and optionally Videos) as a default watch target.
+- [x] **USB / SD card auto-detection** — `removable.rs` polls for new volumes
+      (macOS `/Volumes`, Linux `/media/$USER`, Windows drive letters), detects
+      DCIM folders, and shows an in-app banner offering to add them. ✅
+- [x] **Auto-detect media folders** — `suggest_folders` command suggests
+      Pictures/Videos/Photos/DCIM if they exist; shown in Onboarding when the
+      server is connected but no folders are added yet. ✅
 
 ### UX enhancements
-- [ ] **Drag-and-drop folder addition** — drop a folder onto the app window
-      or tray icon to add it as a watched folder.
-- [ ] **Upload progress in tray tooltip** — show "Uploading 3/17 files" in
-      the system tray hover tooltip, not just inside the app window.
-- [ ] **Conflict resolution UI** — when a file changes on disk after being
-      uploaded, let the user choose: re-upload, skip, or always re-upload.
+- [x] **Drag-and-drop folder addition** — Tauri `onDragDropEvent` handler in
+      App.tsx; drop a folder on the window to add it, with a visual overlay. ✅
+- [x] **Upload progress in tray tooltip** — tray tooltip shows
+      "Uploading N/M files" when syncing. ✅
+- [x] **Conflict resolution UI** — `conflict_policy` config (reupload/skip),
+      enforced in both the watcher ingest and initial scan paths, with a
+      dropdown in Sync Settings. ✅

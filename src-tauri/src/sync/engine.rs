@@ -12,7 +12,7 @@ use tokio::sync::{mpsc, Mutex};
 use uuid::Uuid;
 
 use crate::api::{sha1_to_base64, BulkCheckItem, ImmichClient};
-use crate::config::AppConfig;
+use crate::config::{AppConfig, ConflictPolicy};
 use crate::db::{status, Db};
 use crate::sync::hasher::{hash_file, hash_file_with_progress};
 use crate::sync::queue::{BandwidthLimiter, SyncState, SyncStatus};
@@ -32,6 +32,7 @@ pub const EVT_HISTORY: &str = "sync://history-updated";
 pub const EVT_PROGRESS: &str = "sync://progress";
 pub const EVT_PROGRESS_DONE: &str = "sync://progress-done";
 pub const EVT_FREEABLE: &str = "freeable://updated";
+pub const EVT_REMOVABLE: &str = "sync://removable-detected";
 
 /// Per-file progress pushed to the UI. `phase` is "hashing" or "uploading".
 #[derive(Debug, Clone, serde::Serialize)]
@@ -71,6 +72,9 @@ struct Inner {
     freeable: Mutex<crate::sync::cleanup::FreeableScan>,
     /// Serializes album-add flushes so only one runs at a time.
     album_flush: Mutex<()>,
+    /// Monitors for USB/SD card insertions.
+    #[allow(dead_code)]
+    removable: Mutex<Option<crate::sync::removable::RemovableMonitor>>,
 }
 
 /// Cheaply-cloneable handle to the running engine.
@@ -85,9 +89,19 @@ impl SyncEngine {
         let paused = config.paused;
         let debug = config.debug_logging;
         let notifications = config.notifications_enabled;
-        // Read the keychain exactly once at startup, then cache in memory.
         let api_key = crate::keychain::get_api_key().ok().flatten();
         let client = build_client(&config, api_key.as_deref());
+
+        let app_handle = app.clone();
+        let monitor = crate::sync::removable::RemovableMonitor::start(move |media| {
+            log::info!(
+                "removable media with DCIM detected: {} at {}",
+                media.volume_name,
+                media.dcim_path
+            );
+            let _ = app_handle.emit(EVT_REMOVABLE, &media);
+        });
+
         let inner = Arc::new(Inner {
             app,
             config: Mutex::new(config),
@@ -108,6 +122,7 @@ impl SyncEngine {
             backoff_secs: AtomicU64::new(0),
             freeable: Mutex::new(Default::default()),
             album_flush: Mutex::new(()),
+            removable: Mutex::new(Some(monitor)),
         });
         Self { inner }
     }
@@ -151,7 +166,7 @@ impl SyncEngine {
         }
     }
 
-    async fn enabled_folders(&self) -> Vec<PathBuf> {
+    async fn enabled_folders(&self) -> Vec<(PathBuf, bool)> {
         self.inner
             .config
             .lock()
@@ -159,7 +174,7 @@ impl SyncEngine {
             .folders
             .iter()
             .filter(|f| f.enabled)
-            .map(|f| PathBuf::from(&f.path))
+            .map(|f| (PathBuf::from(&f.path), f.recursive))
             .collect()
     }
 
@@ -189,7 +204,14 @@ impl SyncEngine {
                     if db.cached_hash(&path, size, mtime).ok().flatten().is_some() {
                         false // already synced and unchanged
                     } else {
-                        db.enqueue(&id, &path, 0, size).unwrap_or(false)
+                        let conflict_policy = engine.inner.config.lock().await.conflict_policy;
+                        if conflict_policy == ConflictPolicy::Skip
+                            && db.was_previously_synced(&path).unwrap_or(false)
+                        {
+                            false
+                        } else {
+                            db.enqueue(&id, &path, 0, size).unwrap_or(false)
+                        }
                     }
                 };
                 if inserted {
@@ -204,9 +226,8 @@ impl SyncEngine {
         let folders = self.enabled_folders().await;
         let ext_set = self.inner.config.lock().await.extension_set();
         let (mut queued, mut already, mut filtered, mut content_skipped) = (0, 0, 0, 0);
-        for folder in folders {
-            // Walk the tree off the async runtime so we don't block a worker.
-            let files = tokio::task::spawn_blocking(move || scan_folder(&folder))
+        for (folder, recursive) in folders {
+            let files = tokio::task::spawn_blocking(move || scan_folder(&folder, recursive))
                 .await
                 .unwrap_or_default();
             for path in files {
@@ -228,8 +249,14 @@ impl SyncEngine {
                 let size = meta.as_ref().map(|m| m.len() as i64).unwrap_or(0);
                 let mtime = file_mtime(meta.as_ref());
                 let db = &self.inner.db;
-                // Skip files already confirmed synced and unchanged.
                 if db.cached_hash(&p, size, mtime).ok().flatten().is_some() {
+                    already += 1;
+                    continue;
+                }
+                let conflict_policy = self.inner.config.lock().await.conflict_policy;
+                if conflict_policy == ConflictPolicy::Skip
+                    && db.was_previously_synced(&p).unwrap_or(false)
+                {
                     already += 1;
                     continue;
                 }
@@ -719,7 +746,7 @@ impl SyncEngine {
         let cfg = self.inner.config.lock().await.clone();
         let ext_set = cfg.extension_set();
         let mut info = FolderInspect::default();
-        let files = tokio::task::spawn_blocking(move || scan_folder(&folder))
+        let files = tokio::task::spawn_blocking(move || scan_folder(&folder, true))
             .await
             .unwrap_or_default();
         for file in files {
@@ -1089,8 +1116,8 @@ impl SyncEngine {
         // (path, size, mtime, base64 checksum)
         let mut candidates: Vec<(String, i64, i64, String)> = Vec::new();
         let mut scanned = 0usize;
-        for folder in folders {
-            let files = tokio::task::spawn_blocking(move || scan_folder(&folder))
+        for (folder, recursive) in folders {
+            let files = tokio::task::spawn_blocking(move || scan_folder(&folder, recursive))
                 .await
                 .unwrap_or_default();
             for path in files {

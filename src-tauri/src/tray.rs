@@ -146,9 +146,24 @@ fn status_menu_label(icon: &str, pending: i64) -> String {
 
 /// Update the tray icon, tooltip, and the "Status:" menu line in response to a
 /// status change. `icon` is the icon key from `SyncStatus` (not the raw state).
-pub fn update_status_label<R: Runtime>(app: &AppHandle<R>, icon: &str, pending: i64) {
+/// `uploaded_session` is the number of files uploaded since last start.
+pub fn update_status_label<R: Runtime>(
+    app: &AppHandle<R>,
+    icon: &str,
+    pending: i64,
+    uploaded_session: u64,
+) {
     if let Some(tray) = app.tray_by_id("main-tray") {
-        let _ = tray.set_tooltip(Some(format!("Immich Beam — {}", icon_tooltip(icon))));
+        let tooltip = if icon == "syncing" && pending > 0 {
+            let total = pending as u64 + uploaded_session;
+            format!(
+                "Immich Beam — Uploading {}/{} files",
+                uploaded_session, total
+            )
+        } else {
+            format!("Immich Beam — {}", icon_tooltip(icon))
+        };
+        let _ = tray.set_tooltip(Some(tooltip));
         if let Ok(image) = tauri::image::Image::from_bytes(state_icon_bytes(icon)) {
             let _ = tray.set_icon(Some(image));
         }

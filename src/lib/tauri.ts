@@ -68,6 +68,7 @@ export const api = {
     invoke<FolderInspect>("inspect_folder", { path }),
   getAlbums: () => invoke<Album[]>("get_albums"),
   createAlbum: (name: string) => invoke<Album>("create_album", { name }),
+  suggestFolders: () => invoke<string[]>("suggest_folders"),
 
   startFreeableScan: (days: number) =>
     invoke<void>("start_freeable_scan", { days }),

@@ -85,7 +85,11 @@ pub fn run() {
                         if let Some(icon) = value.get("icon").and_then(|s| s.as_str()) {
                             let pending =
                                 value.get("pending").and_then(|p| p.as_i64()).unwrap_or(0);
-                            tray::update_status_label(&handle, icon, pending);
+                            let uploaded_session = value
+                                .get("uploaded_session")
+                                .and_then(|u| u.as_u64())
+                                .unwrap_or(0);
+                            tray::update_status_label(&handle, icon, pending, uploaded_session);
                         }
                     }
                 });
@@ -138,6 +142,7 @@ pub fn run() {
             commands::inspect_folder,
             commands::get_albums,
             commands::create_album,
+            commands::suggest_folders,
             commands::start_freeable_scan,
             commands::get_freeable_state,
             commands::free_space,

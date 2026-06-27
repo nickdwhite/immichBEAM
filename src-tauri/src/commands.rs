@@ -102,6 +102,7 @@ pub async fn add_folder(
             path,
             enabled: true,
             album_id,
+            recursive: true,
         });
     }
     engine.apply_config(config.clone()).await;
@@ -352,4 +353,30 @@ pub async fn create_album(
             .map_err(map_err),
         None => Err("Not connected to a server".into()),
     }
+}
+
+/// Suggest default media folders (Pictures, Videos, etc.) that exist on this
+/// machine and haven't already been added.
+#[tauri::command]
+pub async fn suggest_folders(engine: State<'_, SyncEngine>) -> CmdResult<Vec<String>> {
+    let config = engine.current_config().await;
+    let existing: std::collections::HashSet<String> =
+        config.folders.iter().map(|f| f.path.clone()).collect();
+
+    let mut suggestions = Vec::new();
+    if let Some(home) = dirs::home_dir() {
+        let candidates = [
+            dirs::picture_dir(),
+            dirs::video_dir(),
+            Some(home.join("Photos")),
+            Some(home.join("DCIM")),
+        ];
+        for candidate in candidates.into_iter().flatten() {
+            if candidate.exists() && !existing.contains(&candidate.to_string_lossy().to_string()) {
+                suggestions.push(candidate.to_string_lossy().to_string());
+            }
+        }
+    }
+    suggestions.dedup();
+    Ok(suggestions)
 }
