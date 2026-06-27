@@ -1,4 +1,4 @@
-# Immich Dock — Setup & TODO
+# Immich Beam — Setup & TODO
 
 Operational steps that require *your* accounts/keys (so they can't be fully
 automated), plus deferred engineering work. For the architecture review see
@@ -11,14 +11,14 @@ automated), plus deferred engineering work. For the architecture review see
 The repo is already initialized locally with an initial commit. To publish:
 
 ```bash
-cd ~/Downloads/projects/immich-dock
+cd ~/Downloads/projects/immich-beam
 
 # Install + log in to the GitHub CLI (browser-based; no token to paste)
 brew install gh
 gh auth login          # choose GitHub.com → HTTPS → login with a browser
 
 # Create the repo and push
-gh repo create immich-dock --public --source=. --push
+gh repo create immich-beam --public --source=. --push
 ```
 
 ## 2. GitHub Actions (already configured)
@@ -57,7 +57,7 @@ self-generated** key — unrelated to OS code signing.
 
 1. Generate the updater key pair:
    ```bash
-   pnpm tauri signer generate -w ~/.tauri/immich-dock.key
+   pnpm tauri signer generate -w ~/.tauri/immich-beam.key
    ```
    Save the password somewhere safe. **Losing this key means you can never push
    updates to already-installed apps.**
@@ -68,11 +68,11 @@ self-generated** key — unrelated to OS code signing.
 
 3. Add the **private** key + password as GitHub repo secrets
    (Settings → Secrets and variables → Actions):
-   - `TAURI_SIGNING_PRIVATE_KEY` = contents of `~/.tauri/immich-dock.key`
+   - `TAURI_SIGNING_PRIVATE_KEY` = contents of `~/.tauri/immich-beam.key`
    - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` = the password you chose
 
 4. Update the `endpoints` URL in `tauri.conf.json` to your actual repo:
-   `https://github.com/<your-user>/immich-dock/releases/latest/download/latest.json`
+   `https://github.com/<your-user>/immich-beam/releases/latest/download/latest.json`
 
 ### Code wiring — DONE ✅
 
@@ -192,3 +192,38 @@ next). Checked off as completed.
 - [x] **D4. Loading skeletons** — spinner replaces bare "Loading…". ✅
 
 All phases (A–D) complete.
+
+---
+
+## 7. Feature roadmap
+
+New feature ideas, partially inspired by reviewing
+[ImmichSync](https://github.com/bees-roadhouse/immichsync/).
+
+### Upload & sync improvements
+- [ ] **Bandwidth throttling** — configurable upload rate limit (KB/s or MB/s)
+      so syncing doesn't saturate the user's connection. Sync settings UI.
+- [ ] **Network share fallback** — detect when `notify`'s native filesystem
+      watcher silently fails on NFS/SMB mounts and auto-switch to poll-based
+      watching with a configurable interval.
+- [ ] **Watcher health monitoring** — periodic probe to detect when a watcher
+      silently dies (network drop, mount disappears) and auto-restart it.
+- [ ] **Batch duplicate checks** — group hash lookups into batch
+      `bulk-upload-check` calls instead of per-item (deferred from §5, revisit
+      if profiling shows the check is a bottleneck).
+
+### Device & media detection
+- [ ] **USB / SD card auto-detection** — detect removable media insertion,
+      scan for DCIM folders (camera convention), and offer to sync.
+      Platform-specific: `WM_DEVICECHANGE` on Windows, `DiskArbitration` on
+      macOS, `udev`/`udisks2` on Linux.
+- [ ] **Auto-detect media folders** — on first run, suggest the user's
+      Pictures folder (and optionally Videos) as a default watch target.
+
+### UX enhancements
+- [ ] **Drag-and-drop folder addition** — drop a folder onto the app window
+      or tray icon to add it as a watched folder.
+- [ ] **Upload progress in tray tooltip** — show "Uploading 3/17 files" in
+      the system tray hover tooltip, not just inside the app window.
+- [ ] **Conflict resolution UI** — when a file changes on disk after being
+      uploaded, let the user choose: re-upload, skip, or always re-upload.

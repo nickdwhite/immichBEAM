@@ -88,7 +88,7 @@ export function SyncSettings({
           onChange={(e) => setAutostart(e.target.checked)}
           className="rounded border-slate-300 text-brand-600"
         />
-        Launch Immich Dock automatically on login
+        Launch Immich Beam automatically on login
       </label>
 
       <label className="flex items-center gap-2 text-sm">

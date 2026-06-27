@@ -1,4 +1,4 @@
-# Building & Releasing Immich Dock
+# Building & Releasing Immich Beam
 
 ## TL;DR
 
@@ -11,7 +11,7 @@
 ## Next steps locally (macOS)
 
 ```bash
-cd immich-dock
+cd immich-beam
 # run the unit tests
 cd src-tauri && cargo test && cd ..
 # produce a local installer (.dmg + .app) in src-tauri/target/release/bundle/

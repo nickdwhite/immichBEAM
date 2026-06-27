@@ -1,12 +1,12 @@
 # Changelog
 
-All notable changes to Immich Dock are documented here. The format follows
+All notable changes to Immich Beam are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/).
 
 ## [0.3.1] - 2026-06-22
 
-The "immich-dock" release: a full rebrand plus a round of features, security
+The "immich-beam" release: a full rebrand plus a round of features, security
 hardening, and dependency cleanup on top of the initial client.
 
 ### Added
@@ -32,7 +32,7 @@ hardening, and dependency cleanup on top of the initial client.
 
 ### Changed
 
-- **Rebranded** from "Immich SyncDesk" to **Immich Dock** — name, bundle
+- **Rebranded** from "Immich SyncDesk" to **Immich Beam** — name, bundle
   identifier (`com.immichdock.desktop`), keychain service, app-data dir, logs,
   and user agent.
 - **New logo & icons** — a blue cloud + photo-swirl + sync-arrows mark; a
@@ -72,5 +72,5 @@ limits and streaming progress, per-folder albums, "Free Up Space", a grouped
 dashboard, OS-keychain API-key storage, in-app auto-update wiring, and CI +
 release workflows for macOS / Windows / Linux.
 
-[0.3.1]: https://github.com/REPLACE_OWNER/immich-dock/releases/tag/v0.3.1
-[0.1.0]: https://github.com/REPLACE_OWNER/immich-dock/releases/tag/v0.1.0
+[0.3.1]: https://github.com/REPLACE_OWNER/immich-beam/releases/tag/v0.3.1
+[0.1.0]: https://github.com/REPLACE_OWNER/immich-beam/releases/tag/v0.1.0

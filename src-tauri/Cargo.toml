@@ -1,12 +1,12 @@
 [package]
-name = "immich-dock"
+name = "immich-beam"
 version = "0.3.1"
 description = "Cross-platform desktop sync client for Immich"
-authors = ["Immich Dock"]
+authors = ["Immich Beam"]
 edition = "2021"
 
 [lib]
-name = "immich_dock_lib"
+name = "immich_beam_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

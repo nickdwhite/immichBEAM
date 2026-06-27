@@ -2178,7 +2178,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "immich-dock"
+name = "immich-beam"
 version = "0.3.1"
 dependencies = [
  "anyhow",

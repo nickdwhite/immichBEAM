@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
-const APP_DIR: &str = "immich-dock";
+const APP_DIR: &str = "immich-beam";
 const CONFIG_FILE: &str = "config.json";
 
 /// A single folder watched for new media.

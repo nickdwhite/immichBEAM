@@ -28,7 +28,7 @@ pub fn build_tray<R: Runtime>(app: &AppHandle<R>) -> Result<()> {
     let web = MenuItem::with_id(app, ID_WEB, "Open Web UI", true, None::<&str>)?;
     let sep1 = PredefinedMenuItem::separator(app)?;
     let sep2 = PredefinedMenuItem::separator(app)?;
-    let quit = MenuItem::with_id(app, ID_QUIT, "Quit Immich Dock", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, ID_QUIT, "Quit Immich Beam", true, None::<&str>)?;
 
     let menu = Menu::with_items(
         app,
@@ -45,7 +45,7 @@ pub fn build_tray<R: Runtime>(app: &AppHandle<R>) -> Result<()> {
     TrayIconBuilder::with_id("main-tray")
         .icon(initial_icon)
         .icon_as_template(false)
-        .tooltip("Immich Dock")
+        .tooltip("Immich Beam")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(move |app, event| handle_menu_event(app, event.id.as_ref()))
@@ -148,7 +148,7 @@ fn status_menu_label(icon: &str, pending: i64) -> String {
 /// status change. `icon` is the icon key from `SyncStatus` (not the raw state).
 pub fn update_status_label<R: Runtime>(app: &AppHandle<R>, icon: &str, pending: i64) {
     if let Some(tray) = app.tray_by_id("main-tray") {
-        let _ = tray.set_tooltip(Some(format!("Immich Dock — {}", icon_tooltip(icon))));
+        let _ = tray.set_tooltip(Some(format!("Immich Beam — {}", icon_tooltip(icon))));
         if let Ok(image) = tauri::image::Image::from_bytes(state_icon_bytes(icon)) {
             let _ = tray.set_icon(Some(image));
         }

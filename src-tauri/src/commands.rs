@@ -172,7 +172,7 @@ pub fn default_extensions() -> Vec<String> {
 fn log_file_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
     app.path()
         .app_log_dir()
-        .map(|d| d.join("immich-dock.log"))
+        .map(|d| d.join("immich-beam.log"))
         .map_err(map_err)
 }
 

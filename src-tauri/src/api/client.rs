@@ -113,7 +113,7 @@ impl ImmichClient {
     ) -> Result<Self> {
         let base_url = base_url.trim_end_matches('/').to_string();
         let mut builder = Client::builder()
-            .user_agent(concat!("ImmichDock/", env!("CARGO_PKG_VERSION")))
+            .user_agent(concat!("ImmichBeam/", env!("CARGO_PKG_VERSION")))
             // Expose the negotiated peer certificate (for TOFU capture).
             .tls_info(true)
             .connect_timeout(Duration::from_secs(10))

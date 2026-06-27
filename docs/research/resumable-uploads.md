@@ -4,7 +4,7 @@
 
 ## The question
 
-Can Immich Dock resume a large upload that was interrupted (network drop,
+Can Immich Beam resume a large upload that was interrupted (network drop,
 pause, crash) instead of restarting it from byte 0?
 
 ## Finding
@@ -38,7 +38,7 @@ The most-discussed implementation path is integrating **tus** (e.g.
 `tus-node-server` in the Immich server, or a `tusd` sidecar). As of this
 writing it has not shipped.
 
-## What this means for Immich Dock
+## What this means for Immich Beam
 
 - We **cannot** implement true resume client-side. An interrupted upload of a
   7 GB file must restart from the beginning — which is already our behavior

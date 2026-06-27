@@ -1,4 +1,4 @@
-# Immich Dock — Comprehensive Review
+# Immich Beam — Comprehensive Review
 
 A multi-dimensional review of the current codebase: code quality, security,
 features, UI/UX, and performance. Findings are rated **High / Medium / Low** and

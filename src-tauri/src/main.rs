@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    immich_dock_lib::run()
+    immich_beam_lib::run()
 }

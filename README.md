@@ -1,4 +1,4 @@
-# Immich Dock
+# Immich Beam
 
 A lightweight, cross-platform desktop sync client for [Immich](https://immich.app/).
 It lives in the system tray, watches local folders, and automatically uploads new

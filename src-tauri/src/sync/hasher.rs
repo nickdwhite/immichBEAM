@@ -86,7 +86,7 @@ mod tests {
     async fn hashes_known_content() {
         // SHA1("abc") = a9993e364706816aba3e25717850c26c9cd0d89d
         let dir = std::env::temp_dir();
-        let path = dir.join("immich_dock_hash_test.txt");
+        let path = dir.join("immich_beam_hash_test.txt");
         tokio::fs::write(&path, b"abc").await.unwrap();
         let fh = hash_file(&path).await.unwrap();
         assert_eq!(fh.sha1_hex, "a9993e364706816aba3e25717850c26c9cd0d89d");
