@@ -120,6 +120,8 @@ pub fn run() {
             commands::add_folder,
             commands::remove_folder,
             commands::clear_api_key,
+            commands::login_with_password,
+            commands::clear_credentials,
             commands::get_status,
             commands::get_connection_info,
             commands::get_cert_fingerprint,

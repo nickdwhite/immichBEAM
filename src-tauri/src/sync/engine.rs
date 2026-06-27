@@ -12,7 +12,8 @@ use tokio::sync::{mpsc, Mutex};
 use uuid::Uuid;
 
 use crate::api::{sha1_to_base64, BulkCheckItem, ImmichClient};
-use crate::config::{AppConfig, ConflictPolicy};
+use crate::api::client::AuthMethod;
+use crate::config::{AppConfig, AuthMethodConfig, ConflictPolicy};
 use crate::db::{status, Db};
 use crate::sync::hasher::{hash_file, hash_file_with_progress};
 use crate::sync::queue::{BandwidthLimiter, SyncState, SyncStatus};
@@ -1363,18 +1364,36 @@ fn build_client(cfg: &AppConfig, api_key: Option<&str>) -> Option<ImmichClient> 
     if cfg.server_url.is_empty() {
         return None;
     }
-    let api_key = api_key?;
-    if api_key.is_empty() {
-        return None;
-    }
-    // A pin only applies in insecure mode; with normal CA validation it's
-    // ignored (and a stale pin must not break a switch to a real cert).
     let pinned = if cfg.allow_insecure {
         decode_pinned_cert(cfg.pinned_cert.as_deref())
     } else {
         None
     };
-    ImmichClient::new(&cfg.server_url, api_key, cfg.allow_insecure, pinned).ok()
+    match cfg.auth_method {
+        AuthMethodConfig::Password => {
+            let token = crate::keychain::get_login_credentials()
+                .ok()
+                .flatten()
+                .map(|(_, _, t)| t)?;
+            if token.is_empty() {
+                return None;
+            }
+            ImmichClient::with_auth(
+                &cfg.server_url,
+                AuthMethod::Bearer(token),
+                cfg.allow_insecure,
+                pinned,
+            )
+            .ok()
+        }
+        AuthMethodConfig::ApiKey => {
+            let api_key = api_key?;
+            if api_key.is_empty() {
+                return None;
+            }
+            ImmichClient::new(&cfg.server_url, api_key, cfg.allow_insecure, pinned).ok()
+        }
+    }
 }
 
 /// Decode a base64-DER pinned certificate from config, if present and valid.

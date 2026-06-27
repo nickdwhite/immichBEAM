@@ -1,9 +1,22 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, CloudOff, Loader2, Plug, Save, ShieldCheck } from "lucide-react";
+import {
+  CheckCircle2,
+  CloudOff,
+  KeyRound,
+  Loader2,
+  LogIn,
+  LogOut,
+  Plug,
+  Save,
+  ShieldCheck,
+  UserRound,
+} from "lucide-react";
 import { api } from "../lib/tauri";
 import { SecurityBadge } from "./SecurityBadge";
 import { useToast } from "./Toast";
 import type { ConfigDto, ConnectionInfo } from "../types";
+
+type AuthTab = "api_key" | "password";
 
 export function ServerSettings({
   config,
@@ -14,28 +27,34 @@ export function ServerSettings({
 }) {
   const [url, setUrl] = useState(config.server_url);
   const [apiKey, setApiKey] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [allowInsecure, setAllowInsecure] = useState(config.allow_insecure);
+  const [authTab, setAuthTab] = useState<AuthTab>(config.auth_method);
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loggingIn, setLoggingIn] = useState(false);
   const [result, setResult] = useState<ConnectionInfo | null>(null);
   const [conn, setConn] = useState<ConnectionInfo | null>(null);
   const [fingerprint, setFingerprint] = useState<string | null>(null);
   const toast = useToast();
 
+  const isConfigured =
+    (config.auth_method === "api_key" && config.has_api_key) ||
+    config.auth_method === "password";
+
   const loadFingerprint = () =>
     api.getCertFingerprint().then(setFingerprint).catch(() => setFingerprint(null));
 
-  // Show live connection status (incl. server version) when configured. Uses
-  // the cached client, so it doesn't prompt for the keychain.
   useEffect(() => {
-    if (config.has_api_key && config.server_url) {
+    if (isConfigured && config.server_url) {
       api.getConnectionInfo().then(setConn).catch(() => setConn(null));
       loadFingerprint();
     } else {
       setConn(null);
       setFingerprint(null);
     }
-  }, [config.has_api_key, config.server_url]);
+  }, [isConfigured, config.server_url]);
 
   const forgetPin = async () => {
     try {
@@ -81,6 +100,42 @@ export function ServerSettings({
     }
   };
 
+  const login = async () => {
+    setLoggingIn(true);
+    setResult(null);
+    try {
+      const info = await api.loginWithPassword(url, email, password, allowInsecure);
+      setResult(info);
+      setPassword("");
+      onSaved();
+      toast.success("Logged in successfully");
+    } catch (e) {
+      setResult({
+        reachable: false,
+        authenticated: false,
+        version: null,
+        user_email: null,
+        insecure: url.startsWith("http://"),
+        message: String(e),
+      });
+    } finally {
+      setLoggingIn(false);
+    }
+  };
+
+  const disconnect = async () => {
+    try {
+      await api.clearCredentials();
+      setEmail("");
+      setPassword("");
+      setResult(null);
+      onSaved();
+      toast.info("Disconnected — all credentials cleared");
+    } catch (e) {
+      toast.error(`Couldn't clear credentials: ${e}`);
+    }
+  };
+
   return (
     <div className="max-w-xl space-y-6">
       {conn && (conn.authenticated || conn.reachable) && (
@@ -119,21 +174,131 @@ export function ServerSettings({
         />
       </div>
 
+      {/* Auth method tabs */}
       <div>
-        <label className="mb-1 block text-sm font-medium">API Key</label>
-        <input
-          type="password"
-          value={apiKey}
-          onChange={(e) => setApiKey(e.target.value)}
-          placeholder={
-            config.has_api_key ? "•••••••• (stored in keychain)" : "Paste API key"
-          }
-          className="w-full rounded-lg border-slate-300 text-sm dark:border-slate-700 dark:bg-slate-800"
-        />
-        <p className="mt-1 text-xs text-slate-400">
-          Stored securely in your OS keychain — never written to disk in plain text.
-        </p>
+        <label className="mb-2 block text-sm font-medium">Authentication</label>
+        <div className="flex rounded-lg border border-slate-200 dark:border-slate-700">
+          <button
+            onClick={() => { setAuthTab("api_key"); setResult(null); }}
+            className={`flex flex-1 items-center justify-center gap-2 rounded-l-lg px-4 py-2 text-sm font-medium transition-colors ${
+              authTab === "api_key"
+                ? "bg-brand-600 text-white"
+                : "text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
+            }`}
+          >
+            <KeyRound size={15} />
+            API Key
+          </button>
+          <button
+            onClick={() => { setAuthTab("password"); setResult(null); }}
+            className={`flex flex-1 items-center justify-center gap-2 rounded-r-lg px-4 py-2 text-sm font-medium transition-colors ${
+              authTab === "password"
+                ? "bg-brand-600 text-white"
+                : "text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
+            }`}
+          >
+            <UserRound size={15} />
+            Email &amp; Password
+          </button>
+        </div>
       </div>
+
+      {authTab === "api_key" ? (
+        <>
+          <div>
+            <label className="mb-1 block text-sm font-medium">API Key</label>
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder={
+                config.has_api_key && config.auth_method === "api_key"
+                  ? "•••••••• (stored in keychain)"
+                  : "Paste API key"
+              }
+              className="w-full rounded-lg border-slate-300 text-sm dark:border-slate-700 dark:bg-slate-800"
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              Stored securely in your OS keychain — never written to disk in plain text.
+            </p>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={test}
+              disabled={testing || !url}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
+            >
+              {testing ? <Loader2 size={16} className="animate-spin" /> : <Plug size={16} />}
+              Test Connection
+            </button>
+            <button
+              onClick={save}
+              disabled={saving || !url}
+              className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+            >
+              {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+              Save
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div>
+            <label className="mb-1 block text-sm font-medium">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
+              className="w-full rounded-lg border-slate-300 text-sm dark:border-slate-700 dark:bg-slate-800"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={
+                config.auth_method === "password"
+                  ? "•••••••• (stored in keychain)"
+                  : "Enter password"
+              }
+              autoComplete="current-password"
+              className="w-full rounded-lg border-slate-300 text-sm dark:border-slate-700 dark:bg-slate-800"
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              Credentials are stored in your OS keychain and used to obtain a session token.
+            </p>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={login}
+              disabled={loggingIn || !url || !email || !password}
+              className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+            >
+              {loggingIn ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <LogIn size={16} />
+              )}
+              Log In
+            </button>
+            {config.auth_method === "password" && (
+              <button
+                onClick={disconnect}
+                className="inline-flex items-center gap-2 rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
+              >
+                <LogOut size={16} />
+                Disconnect
+              </button>
+            )}
+          </div>
+        </>
+      )}
 
       <div className="space-y-2">
         <label className="flex items-center gap-2 text-sm">
@@ -175,25 +340,6 @@ export function ServerSettings({
             )}
           </div>
         )}
-      </div>
-
-      <div className="flex gap-3">
-        <button
-          onClick={test}
-          disabled={testing || !url}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
-        >
-          {testing ? <Loader2 size={16} className="animate-spin" /> : <Plug size={16} />}
-          Test Connection
-        </button>
-        <button
-          onClick={save}
-          disabled={saving || !url}
-          className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
-        >
-          {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-          Save
-        </button>
       </div>
 
       {result && (

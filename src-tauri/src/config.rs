@@ -100,6 +100,23 @@ pub struct AppConfig {
     /// What to do when a previously-uploaded file changes on disk.
     #[serde(default)]
     pub conflict_policy: ConflictPolicy,
+
+    /// Which authentication method is active: "api_key" or "password".
+    #[serde(default)]
+    pub auth_method: AuthMethodConfig,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AuthMethodConfig {
+    ApiKey,
+    Password,
+}
+
+impl Default for AuthMethodConfig {
+    fn default() -> Self {
+        Self::ApiKey
+    }
 }
 
 /// The full set of asset extensions Immich accepts (images + videos), mirroring
@@ -143,6 +160,7 @@ impl Default for AppConfig {
             debug_logging: false,
             notifications_enabled: true,
             conflict_policy: ConflictPolicy::default(),
+            auth_method: AuthMethodConfig::default(),
         }
     }
 }

@@ -84,11 +84,18 @@ fn status_checked(resp: reqwest::Response) -> std::result::Result<reqwest::Respo
     }
 }
 
-/// HTTP client bound to a single Immich server + API key.
+/// How the client authenticates with the Immich server.
+#[derive(Clone, Debug)]
+pub enum AuthMethod {
+    ApiKey(String),
+    Bearer(String),
+}
+
+/// HTTP client bound to a single Immich server.
 #[derive(Clone)]
 pub struct ImmichClient {
     base_url: String,
-    api_key: String,
+    auth: AuthMethod,
     http: Client,
 }
 
@@ -111,29 +118,31 @@ impl ImmichClient {
         allow_insecure: bool,
         pinned_cert: Option<Vec<u8>>,
     ) -> Result<Self> {
+        Self::with_auth(
+            base_url,
+            AuthMethod::ApiKey(api_key.to_string()),
+            allow_insecure,
+            pinned_cert,
+        )
+    }
+
+    pub fn with_auth(
+        base_url: &str,
+        auth: AuthMethod,
+        allow_insecure: bool,
+        pinned_cert: Option<Vec<u8>>,
+    ) -> Result<Self> {
         let base_url = base_url.trim_end_matches('/').to_string();
         let mut builder = Client::builder()
             .user_agent(concat!("ImmichBeam/", env!("CARGO_PKG_VERSION")))
-            // Expose the negotiated peer certificate (for TOFU capture).
             .tls_info(true)
             .connect_timeout(Duration::from_secs(10))
-            // No overall request timeout: large uploads can legitimately take a
-            // long time. Stalls are bounded by the worker's per-item timeout and
-            // pause-cancellation; connect failures still fail fast.
             .timeout(Duration::from_secs(3600));
 
         if let Some(der) = pinned_cert {
             let cert = reqwest::Certificate::from_der(&der)
                 .context("pinned certificate is not valid DER")?;
-            // Trust ONLY the pinned certificate — no built-in CA roots — so a
-            // swapped cert from an in-path attacker is rejected (reqwest 0.13
-            // replaced `tls_built_in_root_certs(false)` + `add_root_certificate`
-            // with `tls_certs_only`).
             builder = builder.tls_certs_only(vec![cert]);
-            // Self-signed homelab certs are usually issued to an IP, which can't
-            // appear in a cert's hostname fields — so relax hostname checking
-            // only for IP-literal servers. For DNS names keep it on, so the cert
-            // must still match the host (defense-in-depth on top of the pin).
             if host_is_ip(&base_url) {
                 builder = builder.danger_accept_invalid_hostnames(true);
             }
@@ -144,9 +153,58 @@ impl ImmichClient {
         let http = builder.build().context("failed to build HTTP client")?;
         Ok(Self {
             base_url,
-            api_key: api_key.to_string(),
+            auth,
             http,
         })
+    }
+
+    /// Add the appropriate auth header to a request builder.
+    fn authed(&self, req: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
+        match &self.auth {
+            AuthMethod::ApiKey(key) => req.header("x-api-key", key),
+            AuthMethod::Bearer(token) => req.header("Authorization", format!("Bearer {token}")),
+        }
+    }
+
+    /// Log in with email + password and return a client using the bearer token.
+    pub async fn login(
+        base_url: &str,
+        email: &str,
+        password: &str,
+        allow_insecure: bool,
+        pinned_cert: Option<Vec<u8>>,
+    ) -> Result<(Self, super::types::LoginResponse)> {
+        let temp = Self::with_auth(
+            base_url,
+            AuthMethod::ApiKey(String::new()),
+            allow_insecure,
+            pinned_cert.clone(),
+        )?;
+        let resp = temp
+            .http
+            .post(temp.url("/auth/login"))
+            .json(&serde_json::json!({
+                "email": email,
+                "password": password,
+            }))
+            .send()
+            .await
+            .context("login request failed")?;
+        if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
+            return Err(anyhow!("invalid email or password"));
+        }
+        let resp = resp
+            .error_for_status()
+            .context("login failed")?;
+        let login: super::types::LoginResponse =
+            resp.json().await.context("invalid login response")?;
+        let client = Self::with_auth(
+            base_url,
+            AuthMethod::Bearer(login.access_token.clone()),
+            allow_insecure,
+            pinned_cert,
+        )?;
+        Ok((client, login))
     }
 
     /// Fetch the server's leaf certificate (DER) from a fresh handshake, for
@@ -192,16 +250,14 @@ impl ImmichClient {
         Ok(resp.json().await?)
     }
 
-    /// `GET /api/users/me` — validates the API key.
+    /// `GET /api/users/me` — validates the current auth credentials.
     pub async fn me(&self) -> Result<UserResponse> {
         let resp = self
-            .http
-            .get(self.url("/api/users/me"))
-            .header("x-api-key", &self.api_key)
+            .authed(self.http.get(self.url("/api/users/me")))
             .send()
             .await?;
         if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
-            return Err(anyhow!("invalid API key"));
+            return Err(anyhow!("invalid credentials"));
         }
         let resp = resp.error_for_status()?;
         Ok(resp.json().await?)
@@ -257,9 +313,7 @@ impl ImmichClient {
         }
         let req = BulkCheckRequest { assets: items };
         let resp = self
-            .http
-            .post(self.url("/api/assets/bulk-upload-check"))
-            .header("x-api-key", &self.api_key)
+            .authed(self.http.post(self.url("/api/assets/bulk-upload-check")))
             .json(&req)
             .send()
             .await?;
@@ -373,9 +427,7 @@ impl ImmichClient {
         }
 
         let resp = self
-            .http
-            .post(self.url("/api/assets"))
-            .header("x-api-key", &self.api_key)
+            .authed(self.http.post(self.url("/api/assets")))
             .header("x-immich-checksum", sha1_hex)
             .multipart(form)
             .send()
@@ -387,9 +439,7 @@ impl ImmichClient {
     /// `POST /api/albums` — create a new (empty) album.
     pub async fn create_album(&self, name: &str) -> Result<Album> {
         let resp = self
-            .http
-            .post(self.url("/api/albums"))
-            .header("x-api-key", &self.api_key)
+            .authed(self.http.post(self.url("/api/albums")))
             .json(&serde_json::json!({ "albumName": name }))
             .send()
             .await?
@@ -400,9 +450,7 @@ impl ImmichClient {
     /// `GET /api/albums`.
     pub async fn albums(&self) -> Result<Vec<Album>> {
         let resp = self
-            .http
-            .get(self.url("/api/albums"))
-            .header("x-api-key", &self.api_key)
+            .authed(self.http.get(self.url("/api/albums")))
             .send()
             .await?
             .error_for_status()?;
@@ -415,9 +463,7 @@ impl ImmichClient {
             return Ok(());
         }
         let path = format!("/api/albums/{}/assets", encode_path_segment(album_id));
-        self.http
-            .put(self.url(&path))
-            .header("x-api-key", &self.api_key)
+        self.authed(self.http.put(self.url(&path)))
             .json(&serde_json::json!({ "ids": asset_ids }))
             .send()
             .await?

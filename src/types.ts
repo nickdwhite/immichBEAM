@@ -9,6 +9,8 @@ export interface WatchedFolder {
 
 export type ConflictPolicy = "reupload" | "skip";
 
+export type AuthMethodConfig = "api_key" | "password";
+
 export interface AppConfig {
   server_url: string;
   allow_insecure: boolean;
@@ -22,6 +24,7 @@ export interface AppConfig {
   debug_logging: boolean;
   notifications_enabled: boolean;
   conflict_policy: ConflictPolicy;
+  auth_method: AuthMethodConfig;
 }
 
 export interface ConfigDto extends AppConfig {

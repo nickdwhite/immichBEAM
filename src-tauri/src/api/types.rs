@@ -87,6 +87,21 @@ pub struct Album {
     pub asset_count: u32,
 }
 
+/// Response of `POST /auth/login`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct LoginResponse {
+    #[serde(rename = "accessToken")]
+    pub access_token: String,
+    #[serde(rename = "userId")]
+    pub user_id: String,
+    #[serde(rename = "userEmail")]
+    pub user_email: String,
+    #[serde(rename = "name")]
+    pub name: String,
+    #[serde(rename = "isAdmin", default)]
+    pub is_admin: bool,
+}
+
 /// Result of validating a server connection, surfaced to the UI.
 #[derive(Debug, Clone, Serialize)]
 pub struct ConnectionInfo {

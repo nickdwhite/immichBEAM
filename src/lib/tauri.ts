@@ -44,6 +44,21 @@ export const api = {
 
   clearApiKey: () => invoke<void>("clear_api_key"),
 
+  loginWithPassword: (
+    url: string,
+    email: string,
+    password: string,
+    allowInsecure: boolean,
+  ) =>
+    invoke<ConnectionInfo>("login_with_password", {
+      url,
+      email,
+      password,
+      allowInsecure,
+    }),
+
+  clearCredentials: () => invoke<void>("clear_credentials"),
+
   getStatus: () => invoke<SyncStatus>("get_status"),
   getConnectionInfo: () => invoke<ConnectionInfo>("get_connection_info"),
   getCertFingerprint: () => invoke<string | null>("get_cert_fingerprint"),

@@ -121,8 +121,70 @@ pub async fn remove_folder(engine: State<'_, SyncEngine>, path: String) -> CmdRe
 pub async fn clear_api_key(engine: State<'_, SyncEngine>) -> CmdResult<()> {
     keychain::delete_api_key().map_err(map_err)?;
     engine.set_api_key(None).await;
-    // Rebuild client (will become None without a key).
     let config = engine.current_config().await;
+    engine.apply_config(config).await;
+    Ok(())
+}
+
+/// Log in with email + password. Stores credentials in the keychain and
+/// switches the auth method to "password".
+#[tauri::command]
+pub async fn login_with_password(
+    engine: State<'_, SyncEngine>,
+    url: String,
+    email: String,
+    password: String,
+    allow_insecure: bool,
+) -> CmdResult<ConnectionInfo> {
+    let pinned = {
+        let cfg = engine.current_config().await;
+        if cfg.allow_insecure {
+            cfg.pinned_cert
+                .as_deref()
+                .and_then(|b64| {
+                    use base64::Engine as _;
+                    base64::engine::general_purpose::STANDARD.decode(b64).ok()
+                })
+        } else {
+            None
+        }
+    };
+    let (_client, login) =
+        ImmichClient::login(&url, &email, &password, allow_insecure, pinned)
+            .await
+            .map_err(map_err)?;
+
+    keychain::set_login_credentials(&email, &password, &login.access_token)
+        .map_err(map_err)?;
+
+    let mut config = engine.current_config().await;
+    let new_url = url.trim().trim_end_matches('/').to_string();
+    if new_url != config.server_url {
+        config.pinned_cert = None;
+    }
+    config.server_url = new_url;
+    config.allow_insecure = allow_insecure;
+    config.auth_method = crate::config::AuthMethodConfig::Password;
+    engine.apply_config(config).await;
+
+    Ok(ConnectionInfo {
+        reachable: true,
+        authenticated: true,
+        version: None,
+        user_email: Some(login.user_email),
+        insecure: url.starts_with("http://"),
+        message: format!("Logged in as {}", login.name),
+    })
+}
+
+/// Clear all stored credentials (API key and login) and disconnect.
+#[tauri::command]
+pub async fn clear_credentials(engine: State<'_, SyncEngine>) -> CmdResult<()> {
+    keychain::delete_api_key().map_err(map_err)?;
+    keychain::delete_login_credentials().map_err(map_err)?;
+    engine.set_api_key(None).await;
+    let mut config = engine.current_config().await;
+    config.auth_method = crate::config::AuthMethodConfig::ApiKey;
     engine.apply_config(config).await;
     Ok(())
 }
