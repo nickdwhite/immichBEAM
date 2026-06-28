@@ -87,12 +87,15 @@ export function Sidebar({
         </div>
       </div>
 
-      <nav className="flex-1 space-y-4 overflow-y-auto px-2 py-1">
+      <nav className="flex-1 space-y-3 overflow-y-auto px-2 py-1">
         {SECTIONS.map((section) => (
-          <div key={section.title} className="space-y-1">
-            <p className="px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              {section.title}
-            </p>
+          <div key={section.title} className="space-y-0.5">
+            <div className="flex items-center gap-2 px-3 pb-1">
+              <p className="shrink-0 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                {section.title}
+              </p>
+              <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+            </div>
             {section.items.map(({ id, label, Icon }) => {
               const badge =
                 id === "queue" && status.pending > 0
@@ -106,7 +109,7 @@ export function Sidebar({
                   onClick={() => onChange(id)}
                   aria-current={tab === id ? "page" : undefined}
                   className={clsx(
-                    "flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                    "flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-[13px] font-medium transition-colors",
                     tab === id
                       ? "bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-200"
                       : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800",

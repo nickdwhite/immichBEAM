@@ -288,3 +288,32 @@ New feature ideas, partially inspired by reviewing
       ServerSettings UI (list of servers with add/remove/edit). The sync engine
       would need to fan out uploads to multiple targets or let each folder
       declare its target server.
+
+### Diagnostics & Logging
+- [ ] **Log level filtering** — replace the single "verbose debug logging"
+      checkbox with a log-level dropdown (Error / Warning / Info / Debug) in
+      Sync Settings, and surface the same filter in the Diagnostics log viewer
+      so users can narrow to errors or warnings without scrolling.
+- [ ] **Log category filtering** — tag log lines by source module (Sync,
+      Upload, Album, Auth, Watcher, System) and add toggle chips in the
+      Diagnostics view to show/hide categories independently.
+- [ ] **Log search** — text search input in the Diagnostics log viewer,
+      matching against the raw log text (same pattern as the History view).
+- [ ] **Export log** — button to copy the full log to the clipboard or save it
+      as a `.log` file via a save-dialog, for attaching to bug reports.
+- [ ] **Log retention settings** — configurable max age (days) and/or max size
+      (MB) for the on-disk log file, with automatic rotation.
+
+### Backup & Restore
+- [ ] **Export configuration** — export the current `AppConfig` (watched
+      folders, server URL, sync settings, album mode, extension filters) to a
+      JSON file via a save-dialog. Sensitive data (API key, password, bearer
+      token) must be excluded — only the keychain service names are referenced.
+- [ ] **Import configuration** — load a previously exported JSON config file
+      via an open-dialog, validate it, and apply it (merging or replacing
+      folders, restoring server URL and settings). Prompt the user to
+      re-enter credentials after import.
+- [ ] **Database backup** — option to export the SQLite database (hash cache,
+      upload history, uploaded_assets, pending queue) as a `.db` file for
+      migration to a new machine or disaster recovery. Import would merge or
+      replace the existing database.
