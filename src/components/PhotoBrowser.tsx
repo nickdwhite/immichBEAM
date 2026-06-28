@@ -1,35 +1,16 @@
-import { useEffect, useRef, useState } from "react";
-import { Image as ImageIcon, Images, Loader2, Video } from "lucide-react";
+import { useState } from "react";
+import { Images, LayoutGrid } from "lucide-react";
 import { isServerConfigured } from "../lib/config";
-import { useBrowse, type BrowseFilter } from "../hooks/useBrowse";
-import { PhotoTile } from "./PhotoTile";
-import { PhotoLightbox } from "./PhotoLightbox";
-import type { BrowseAsset, ConfigDto } from "../types";
+import { TimelineGrid } from "./TimelineGrid";
+import { AlbumList } from "./AlbumList";
+import { AlbumView } from "./AlbumView";
+import type { Album, ConfigDto } from "../types";
 
-const FILTERS: { id: BrowseFilter; label: string; Icon: typeof Images }[] = [
-  { id: "all", label: "All", Icon: Images },
-  { id: "IMAGE", label: "Photos", Icon: ImageIcon },
-  { id: "VIDEO", label: "Videos", Icon: Video },
-];
+type Mode = "timeline" | "albums";
 
 export function PhotoBrowser({ config }: { config: ConfigDto }) {
-  const [filter, setFilter] = useState<BrowseFilter>("all");
-  const [active, setActive] = useState<BrowseAsset | null>(null);
-  const { items, loading, error, hasMore, loadMore } = useBrowse(filter);
-  const sentinel = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = sentinel.current;
-    if (!el || !hasMore) return;
-    const obs = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) void loadMore();
-      },
-      { rootMargin: "300px" },
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [hasMore, loadMore]);
+  const [mode, setMode] = useState<Mode>("timeline");
+  const [openedAlbum, setOpenedAlbum] = useState<Album | null>(null);
 
   if (!isServerConfigured(config)) {
     return (
@@ -45,49 +26,40 @@ export function PhotoBrowser({ config }: { config: ConfigDto }) {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-1.5">
-        {FILTERS.map(({ id, label, Icon }) => (
+      {!openedAlbum && (
+        <div className="inline-flex rounded-lg border border-slate-200 p-0.5 dark:border-slate-700">
           <button
-            key={id}
-            onClick={() => setFilter(id)}
-            aria-pressed={filter === id}
-            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
-              filter === id
+            onClick={() => setMode("timeline")}
+            aria-pressed={mode === "timeline"}
+            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+              mode === "timeline"
                 ? "bg-brand-600 text-white"
-                : "border border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                : "text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
             }`}
           >
-            <Icon size={14} /> {label}
+            <Images size={14} /> Timeline
           </button>
-        ))}
-      </div>
-
-      {error && (
-        <p className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
-          {error}
-        </p>
+          <button
+            onClick={() => setMode("albums")}
+            aria-pressed={mode === "albums"}
+            className={`inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+              mode === "albums"
+                ? "bg-brand-600 text-white"
+                : "text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
+            }`}
+          >
+            <LayoutGrid size={14} /> Albums
+          </button>
+        </div>
       )}
 
-      {items.length === 0 && !loading ? (
-        <p className="rounded-lg border border-dashed border-slate-300 p-10 text-center text-sm text-slate-400 dark:border-slate-700">
-          No photos found.
-        </p>
+      {openedAlbum ? (
+        <AlbumView album={openedAlbum} onBack={() => setOpenedAlbum(null)} />
+      ) : mode === "timeline" ? (
+        <TimelineGrid />
       ) : (
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
-          {items.map((a) => (
-            <PhotoTile key={a.id} asset={a} onClick={() => setActive(a)} />
-          ))}
-        </div>
+        <AlbumList onOpen={setOpenedAlbum} />
       )}
-
-      <div ref={sentinel} className="h-1" />
-      {loading && (
-        <div className="flex justify-center py-4">
-          <Loader2 className="animate-spin text-brand-500" size={20} />
-        </div>
-      )}
-
-      {active && <PhotoLightbox asset={active} onClose={() => setActive(null)} />}
     </div>
   );
 }

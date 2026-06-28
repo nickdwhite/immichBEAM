@@ -580,15 +580,21 @@ impl ImmichClient {
             .error_for_status()?)
     }
 
-    /// `GET /api/albums/{id}` — an album with its assets, for "open album".
-    pub async fn album_assets(&self, album_id: &str) -> Result<AlbumAssetsResponse> {
+    /// `GET /api/albums/{id}` — the assets in an album, for "open album".
+    ///
+    /// Parsed defensively because Immich has shipped two shapes for an album's
+    /// `assets` field: a wrapped `SearchAssetResponseDto`
+    /// (`{ total, count, items, nextPage }`) on current servers, and a flat
+    /// `AssetResponseDto[]` on older ones. Both are handled.
+    pub async fn album_assets(&self, album_id: &str) -> Result<Vec<BrowseAsset>> {
         let path = format!("/api/albums/{}", encode_path_segment(album_id));
         let resp = self
             .authed(self.http.get(self.url(&path)))
             .send()
             .await?
             .error_for_status()?;
-        Ok(resp.json().await?)
+        let body: serde_json::Value = resp.json().await?;
+        Ok(album_asset_items(&body))
     }
 
     /// `GET /api/assets/{id}/original` — streaming download response; the
@@ -601,11 +607,55 @@ impl ImmichClient {
             .await?
             .error_for_status()?)
     }
+
+    /// `GET /api/assets/{id}/video/playback` — the play-ready (transcoded)
+    /// stream for inline `<video>` playback. The optional Range header is
+    /// forwarded so the webview can seek efficiently; 206 Partial Content and
+    /// 200 (full) are both accepted.
+    pub async fn video_playback(
+        &self,
+        asset_id: &str,
+        range: Option<&str>,
+    ) -> Result<reqwest::Response> {
+        let path = format!("/api/assets/{}/video/playback", encode_path_segment(asset_id));
+        let mut req = self.authed(self.http.get(self.url(&path)));
+        if let Some(r) = range {
+            req = req.header("range", r);
+        }
+        let resp = req.send().await?;
+        if !resp.status().is_success() {
+            return Err(anyhow!("video playback failed: HTTP {}", resp.status()));
+        }
+        Ok(resp)
+    }
 }
 
 /// Encode raw SHA1 bytes as Base64 (for bulk-upload-check).
 pub fn sha1_to_base64(sha1_bytes: &[u8]) -> String {
     base64::engine::general_purpose::STANDARD.encode(sha1_bytes)
+}
+
+/// Extract the asset list from a `GET /api/albums/{id}` response, tolerating
+/// both Immich shapes for the `assets` field: a wrapped
+/// `SearchAssetResponseDto` (`{ total, count, items, nextPage }`) on current
+/// servers, or a flat `AssetResponseDto[]` on older ones.
+fn album_asset_items(album: &serde_json::Value) -> Vec<BrowseAsset> {
+    let Some(assets) = album.get("assets") else {
+        return Vec::new();
+    };
+    let items = match assets {
+        serde_json::Value::Array(_) => assets,
+        serde_json::Value::Object(_) => assets.get("items").unwrap_or(&serde_json::Value::Null),
+        _ => return Vec::new(),
+    };
+    items
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| serde_json::from_value::<BrowseAsset>(v.clone()).ok())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// True if the host in `base_url` is an IP literal (v4 or v6). Used to decide
@@ -664,6 +714,42 @@ mod tests {
         assert_eq!(encode_path_segment("a/b"), "a%2Fb");
         assert_eq!(encode_path_segment("../x"), "..%2Fx");
         assert_eq!(encode_path_segment("a b?c#d"), "a%20b%3Fc%23d");
+    }
+
+    #[test]
+    fn album_asset_items_handles_both_shapes() {
+        // Wrapped shape ({ assets: { total, count, items, nextPage } }) — current servers.
+        let wrapped = serde_json::json!({
+            "albumName": "Trip",
+            "assets": {
+                "total": 2,
+                "count": 2,
+                "items": [
+                    {"id": "a1", "type": "IMAGE"},
+                    {"id": "a2", "type": "VIDEO"}
+                ],
+                "nextPage": null
+            }
+        });
+        let items = album_asset_items(&wrapped);
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].id, "a1");
+        assert_eq!(items[1].asset_type, "VIDEO");
+
+        // Flat array shape ({ assets: [...] }) — older servers.
+        let flat = serde_json::json!({
+            "albumName": "Old",
+            "assets": [
+                {"id": "b1", "type": "IMAGE"},
+                {"id": "b2", "type": "IMAGE"}
+            ]
+        });
+        let items = album_asset_items(&flat);
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[1].id, "b2");
+
+        // Missing assets → empty.
+        assert!(album_asset_items(&serde_json::json!({"albumName": "Empty"})).is_empty());
     }
 }
 

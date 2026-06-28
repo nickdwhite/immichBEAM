@@ -34,6 +34,14 @@ pub async fn get_config(engine: State<'_, SyncEngine>) -> CmdResult<ConfigDto> {
     })
 }
 
+/// Human-readable version for the window title, sidebar, and About tab: the
+/// package semver, plus — in dev builds only — the git branch, short commit,
+/// and a `*` if the tree is dirty.
+#[tauri::command]
+pub fn get_version_display() -> String {
+    crate::version_display()
+}
+
 /// Validate a server URL + API key without persisting anything.
 /// If `api_key` is omitted, the stored key is used.
 #[tauri::command]
@@ -486,8 +494,7 @@ pub async fn browse_album_assets(
     album_id: String,
 ) -> CmdResult<Vec<BrowseAsset>> {
     let client = engine.client().await.ok_or("Not connected to a server")?;
-    let resp = client.album_assets(&album_id).await.map_err(map_err)?;
-    Ok(resp.assets.items)
+    client.album_assets(&album_id).await.map_err(map_err)
 }
 
 /// `GET /api/assets/{id}/original` — stream the original to a destination path

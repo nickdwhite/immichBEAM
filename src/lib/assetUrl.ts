@@ -16,3 +16,16 @@ export function assetUrl(
 ): string {
   return `${ORIGIN}/${encodeURIComponent(id)}?size=${size}`;
 }
+
+// Inline `<video>` source — routed to /api/assets/{id}/video/playback by the
+// immichasset scheme handler (with Range passthrough for seeking).
+export function videoUrl(id: string): string {
+  return `${ORIGIN}/video/${encodeURIComponent(id)}`;
+}
+
+// Original bytes — routed to /api/assets/{id}/original. Used for SVG (and other
+// formats Immich may not rasterize into a thumbnail), which the browser renders
+// natively via <img>.
+export function originalUrl(id: string): string {
+  return `${ORIGIN}/original/${encodeURIComponent(id)}`;
+}

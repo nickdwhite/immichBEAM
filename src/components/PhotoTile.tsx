@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { FileImage, FileVideo, Film } from "lucide-react";
-import { assetUrl } from "../lib/assetUrl";
+import { assetUrl, originalUrl } from "../lib/assetUrl";
 import type { BrowseAsset } from "../types";
 
 export function PhotoTile({
@@ -11,6 +11,9 @@ export function PhotoTile({
   onClick: () => void;
 }) {
   const isVideo = asset.type === "VIDEO";
+  // SVG: Immich may not rasterize a thumbnail, so load the original — the
+  // browser renders the vector natively (safe: <img> won't execute SVG scripts).
+  const isSvg = asset.originalMimeType === "image/svg+xml";
   const [failed, setFailed] = useState(false);
   const ext =
     asset.originalFileName?.split(".").pop()?.toUpperCase() ??
@@ -29,7 +32,7 @@ export function PhotoTile({
         </div>
       ) : (
         <img
-          src={assetUrl(asset.id, "thumbnail")}
+          src={isSvg ? originalUrl(asset.id) : assetUrl(asset.id, "thumbnail")}
           alt={asset.originalFileName ?? ""}
           loading="lazy"
           onError={() => setFailed(true)}

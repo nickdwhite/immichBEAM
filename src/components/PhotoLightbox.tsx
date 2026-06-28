@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { save } from "@tauri-apps/plugin-dialog";
 import { Download, Loader2, X } from "lucide-react";
-import { assetUrl } from "../lib/assetUrl";
+import { assetUrl, videoUrl } from "../lib/assetUrl";
 import { api } from "../lib/tauri";
 import { useToast } from "./Toast";
 import type { BrowseAsset } from "../types";
@@ -74,9 +74,12 @@ export function PhotoLightbox({
         onClick={onClose}
       >
         {isVideo ? (
-          <p className="text-sm text-slate-300">
-            Video preview isn't supported yet — use Download.
-          </p>
+          <video
+            src={videoUrl(asset.id)}
+            controls
+            autoPlay
+            className="max-h-full max-w-full"
+          />
         ) : (
           <img
             src={assetUrl(asset.id, "preview")}

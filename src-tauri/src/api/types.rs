@@ -178,17 +178,6 @@ pub struct MetadataSearchResponse {
     pub assets: SearchAssetPage,
 }
 
-/// `GET /api/albums/{id}` response, trimmed to what the browser needs.
-#[derive(Debug, Clone, Deserialize)]
-pub struct AlbumAssetsResponse {
-    #[serde(default)]
-    pub assets: SearchAssetPage,
-    /// Album title (used by the album browser in a later commit).
-    #[allow(dead_code)]
-    #[serde(rename = "albumName", default)]
-    pub album_name: Option<String>,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

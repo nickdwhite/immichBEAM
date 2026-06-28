@@ -30,6 +30,8 @@ import type {
 export const api = {
   getConfig: () => invoke<ConfigDto>("get_config"),
 
+  getVersionDisplay: () => invoke<string>("get_version_display"),
+
   testConnection: (url: string, apiKey: string | null, allowInsecure: boolean) =>
     invoke<ConnectionInfo>("test_connection", {
       url,

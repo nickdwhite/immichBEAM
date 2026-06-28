@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "immich-beam v0.3.6",
+        "title": "Immich Beam",
         "width": 900,
         "height": 600,
         "minWidth": 700,
@@ -27,8 +27,8 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data: immichasset: http://immichasset.localhost; style-src 'self' 'unsafe-inline'; connect-src 'self'",
-      "devCsp": "default-src 'self'; img-src 'self' data: https: http: immichasset: http://immichasset.localhost; connect-src 'self' https: http: ws: wss:; style-src 'self' 'unsafe-inline'",
+      "csp": "default-src 'self'; img-src 'self' data: immichasset: http://immichasset.localhost; media-src 'self' immichasset: http://immichasset.localhost; style-src 'self' 'unsafe-inline'; connect-src 'self'",
+      "devCsp": "default-src 'self'; img-src 'self' data: https: http: immichasset: http://immichasset.localhost; media-src 'self' immichasset: http://immichasset.localhost; connect-src 'self' https: http: ws: wss:; style-src 'self' 'unsafe-inline'",
       "dangerousDisableAssetCspModification": false
     }
   },
