@@ -3,7 +3,7 @@
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
-use crate::api::{Album, ConnectionInfo, ImmichClient, ServerFeatures};
+use crate::api::{Album, BrowseAsset, ConnectionInfo, ImmichClient, ServerFeatures};
 use crate::config::{AppConfig, WatchedFolder};
 use crate::db::{HistoryItem, QueueItem};
 use crate::keychain;
@@ -447,6 +447,72 @@ pub async fn reorganize_albums(
     engine: State<'_, SyncEngine>,
 ) -> CmdResult<crate::sync::cleanup::ReorganizeResult> {
     Ok(engine.reorganize_albums().await)
+}
+
+// ---- Remote browser (download direction) -------------------------------
+
+/// One page of browser results, shaped for the frontend.
+#[derive(Serialize)]
+pub struct BrowsePage {
+    pub items: Vec<BrowseAsset>,
+    #[serde(rename = "nextPage")]
+    pub next_page: Option<String>,
+}
+
+/// `POST /api/search/metadata` — one page of the asset timeline/grid.
+/// `asset_type` is `Some("IMAGE")` / `Some("VIDEO")` / `None` (all).
+#[tauri::command]
+pub async fn browse_assets(
+    engine: State<'_, SyncEngine>,
+    page: u32,
+    size: u32,
+    asset_type: Option<String>,
+) -> CmdResult<BrowsePage> {
+    let client = engine.client().await.ok_or("Not connected to a server")?;
+    let resp = client
+        .search_assets(page, size, asset_type.as_deref())
+        .await
+        .map_err(map_err)?;
+    Ok(BrowsePage {
+        items: resp.assets.items,
+        next_page: resp.assets.next_page,
+    })
+}
+
+/// `GET /api/albums/{id}` — assets in a specific album.
+#[tauri::command]
+pub async fn browse_album_assets(
+    engine: State<'_, SyncEngine>,
+    album_id: String,
+) -> CmdResult<Vec<BrowseAsset>> {
+    let client = engine.client().await.ok_or("Not connected to a server")?;
+    let resp = client.album_assets(&album_id).await.map_err(map_err)?;
+    Ok(resp.assets.items)
+}
+
+/// `GET /api/assets/{id}/original` — stream the original to a destination path
+/// chosen via the frontend save dialog.
+#[tauri::command]
+pub async fn download_asset(
+    engine: State<'_, SyncEngine>,
+    asset_id: String,
+    destination: String,
+) -> CmdResult<()> {
+    use futures::StreamExt;
+    use tokio::io::AsyncWriteExt;
+
+    let client = engine.client().await.ok_or("Not connected to a server")?;
+    let resp = client.download_asset(&asset_id).await.map_err(map_err)?;
+    let mut file = tokio::fs::File::create(&destination)
+        .await
+        .map_err(map_err)?;
+    let mut stream = resp.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(map_err)?;
+        file.write_all(&chunk).await.map_err(map_err)?;
+    }
+    file.flush().await.map_err(map_err)?;
+    Ok(())
 }
 
 /// Suggest default media folders (Pictures, Videos, etc.) that exist on this

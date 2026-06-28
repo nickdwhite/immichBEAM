@@ -112,6 +112,70 @@ pub fn run() {
                 }
             }
         })
+        // Custom URI scheme: `<img src="immichasset://localhost/{id}?size=">` is
+        // proxied to Immich through the authenticated client, so the webview can
+        // load server thumbnails directly (cached) with no frontend auth.
+        .register_asynchronous_uri_scheme_protocol(
+            "immichasset",
+            move |ctx, request, responder| {
+                let app = ctx.app_handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let path = request.uri().path().to_string();
+                    let query = request.uri().query().map(|q| q.to_string());
+                    let asset_id = path.trim_start_matches('/').to_string();
+                    let size = query
+                        .as_deref()
+                        .and_then(|q| {
+                            q.split('&').find_map(|kv| {
+                                let (k, v) = kv.split_once('=')?;
+                                (k == "size").then(|| v.to_string())
+                            })
+                        })
+                        .unwrap_or_else(|| "preview".to_string());
+                    let engine = app.state::<SyncEngine>();
+                    let response = if asset_id.is_empty() {
+                        text_response(400, "missing asset id")
+                    } else {
+                        match engine.client().await {
+                            None => text_response(503, "not connected"),
+                        Some(client) => match client.thumbnail(&asset_id, &size).await {
+                            Ok(resp) => {
+                                // Trust the Content-Type Immich actually returned
+                                // (webp/jpeg, or the original for un-transcoded
+                                // formats like SVG) rather than guessing by size.
+                                let mime = resp
+                                    .headers()
+                                    .get("content-type")
+                                    .and_then(|v| v.to_str().ok())
+                                    .map(|s| s.to_string())
+                                    .unwrap_or_else(|| {
+                                        if size == "thumbnail" {
+                                            "image/webp".to_string()
+                                        } else {
+                                            "image/jpeg".to_string()
+                                        }
+                                    });
+                                match resp.bytes().await {
+                                    Ok(bytes) => tauri::http::Response::builder()
+                                        .status(200)
+                                        .header("Content-Type", mime)
+                                        .header(
+                                            "Cache-Control",
+                                            "public, max-age=86400, immutable",
+                                        )
+                                        .body(bytes.to_vec())
+                                        .unwrap(),
+                                    Err(e) => text_response(502, &format!("{e:#}")),
+                                }
+                            }
+                            Err(e) => text_response(502, &format!("{e:#}")),
+                        },
+                        }
+                    };
+                    responder.respond(response);
+                });
+            },
+        )
         .invoke_handler(tauri::generate_handler![
             commands::get_config,
             commands::test_connection,
@@ -147,6 +211,9 @@ pub fn run() {
             commands::create_album,
             commands::reorganize_albums,
             commands::suggest_folders,
+            commands::browse_assets,
+            commands::browse_album_assets,
+            commands::download_asset,
             commands::export_log,
             commands::purge_old_logs,
             commands::start_freeable_scan,
@@ -157,4 +224,12 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running Immich Beam");
+}
+
+/// A minimal text error response for the `immichasset` URI scheme handler.
+fn text_response(status: u16, msg: &str) -> tauri::http::Response<Vec<u8>> {
+    tauri::http::Response::builder()
+        .status(status)
+        .body(msg.as_bytes().to_vec())
+        .unwrap()
 }

@@ -165,6 +165,8 @@ pub struct SearchAssetPage {
     /// numeric `page` primarily; this is an additional end-of-results signal.
     #[serde(rename = "nextPage", default)]
     pub next_page: Option<String>,
+    /// Total result count (not currently surfaced to the UI).
+    #[allow(dead_code)]
     #[serde(default)]
     pub total: Option<u64>,
 }
@@ -181,6 +183,8 @@ pub struct MetadataSearchResponse {
 pub struct AlbumAssetsResponse {
     #[serde(default)]
     pub assets: SearchAssetPage,
+    /// Album title (used by the album browser in a later commit).
+    #[allow(dead_code)]
     #[serde(rename = "albumName", default)]
     pub album_name: Option<String>,
 }

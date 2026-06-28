@@ -563,20 +563,21 @@ impl ImmichClient {
         Ok(resp.json().await?)
     }
 
-    /// `GET /api/assets/{id}/thumbnail?size=` — raw image bytes for the
-    /// browser grid/lightbox. `size` is `"thumbnail"`, `"preview"`, or `"full"`.
-    pub async fn thumbnail(&self, asset_id: &str, size: &str) -> Result<Vec<u8>> {
+    /// `GET /api/assets/{id}/thumbnail?size=` — the upstream response, so the
+    /// caller can read the Content-Type Immich actually returned (webp/jpeg, and
+    /// occasionally the original for formats Immich doesn't transcode) before
+    /// pulling the bytes. `size` is `"thumbnail"`, `"preview"`, or `"full"`.
+    pub async fn thumbnail(&self, asset_id: &str, size: &str) -> Result<reqwest::Response> {
         let path = format!(
             "/api/assets/{}/thumbnail?size={}",
             encode_path_segment(asset_id),
             encode_path_segment(size),
         );
-        let resp = self
+        Ok(self
             .authed(self.http.get(self.url(&path)))
             .send()
             .await?
-            .error_for_status()?;
-        Ok(resp.bytes().await?.to_vec())
+            .error_for_status()?)
     }
 
     /// `GET /api/albums/{id}` — an album with its assets, for "open album".
