@@ -2,102 +2,109 @@
 
 Last updated: 2026-06-28
 
-## Repo and GitHub state
+## Repo and branch state
 
 - Local repo path: `/Users/ndw-eiq/Downloads/projects/immich-syncdesk`
-- App name: **Immich Beam** (renamed from Immich Dock on 2026-06-27)
-- Package/folder name: `immich-syncdesk` (intentionally unchanged)
-- Version: `0.3.6` (`tauri.conf.json`, `Cargo.toml`, `package.json`)
-- Current branch: `main`
-- Current HEAD: `5ee32dd` (`Add album organization modes (off/device/folder)`)
-- Working tree status at handoff: **clean** (all changes committed and pushed)
+- App name: **Immich Beam** (package/folder still `immich-syncdesk`, intentionally unchanged)
+- Version: `0.3.8` (`tauri.conf.json`, `Cargo.toml`, `package.json`)
+- Base branch: `main` @ `52d6bf4` ("Bump version to 0.3.8"), in sync with `origin/main`
+- **Active branch: `feat/remote-browser`** — created off `main` for the new feature below.
+- Not yet pushed (no remote tracking branch exists yet).
+- Working tree status: clean except an untracked `.claude/` directory (carried over, harmless).
 - GitHub repo: `nickdwhite/immich-beam` — <https://github.com/nickdwhite/immich-beam>
-- Visibility: `PRIVATE` · Default branch: `main`
 - Git remote: `origin https://github.com/nickdwhite/immich-beam.git`
-- GitHub CLI (`gh` 2.95.0) installed + authenticated for `nickdwhite` (HTTPS). Do not store/paste any token into the repo or docs.
+- GitHub CLI (`gh`) installed + authenticated for `nickdwhite` (HTTPS). Do not store/paste any token into the repo or docs.
 
-## What this project is
+## What this branch is for
 
-Cross-platform Tauri v2 + React 19 + Rust desktop sync client for Immich (self-hosted photo server). Rust sync engine (streaming uploads, SHA1 hash cache in SQLite, TOFU cert pinning, file watcher via notify, Live Photo pairing, XMP sidecars, free-up-space). React frontend with multiple views (Overview, Folders, History, Server, Sync, Diagnostics, About). CI on Linux x64+ARM and Windows x64+ARM; release workflow on macOS universal, Windows x64+ARM, Linux x64+ARM.
+**New feature: a Remote Immich Photo Browser.**
 
-## What shipped this arc (all on `main`, all CI green)
+Immich Beam today is a **one-way upload client** (local → server). Every existing
+view — Overview, Queue, History, Free Up Space, Server, Folders, Sync,
+Diagnostics, About — is about pushing files *up*. This feature adds the opposite
+direction: browsing and downloading photos that already live *on* the server.
 
-Original goal (Ubuntu ARM release) was already resolved before this session and verified live; this session's work:
+This is a genuinely new direction; it is **not** in `docs/TODO.md`'s roadmap. It
+will be developed on this branch and PR'd back to `main` when ready.
 
-- `4cb617b` **Username/password (JWT bearer) authentication** — `ImmichClient` holds an `AuthMethod` enum (`ApiKey`|`Bearer`) with a shared `authed()` header helper; all `x-api-key` sites migrated. `ImmichClient::login()` → `POST /api/auth/login`. Keychain entries + helpers in `keychain.rs`. `AuthMethodConfig` + `auth_method` on `AppConfig`. `login_with_password` + `clear_credentials` IPC. ServerSettings rewritten with API-Key / Email-Password tabs.
-- `f09ad8d` Rewrite HANDOFF + mark username/password auth done in TODO.
-- `b860ac7` **Bearer-token refresh on auth errors** — on a 401/403 with password auth, `SyncEngine::try_refresh_login` re-logs in from stored credentials, persists the new token via `keychain::set_login_token`, swaps the live client. Serialized (`refresh_lock`) + throttled (≥20s). Both auth-error sites in `process_one` use `on_auth_error`. Cleared the `set_login_token` dead-code warning.
-- `a485510` **Auth UX polish + admin status** — `is_admin` added to `ConnectionInfo`, populated from `/api/users/me` and `LoginResponse`; "admin" pill in ServerSettings; "Test Session" button (validates the bearer session); login-failure toast. Cleared the `user_id`/`is_admin` dead-code warning.
-- `5c6f253` **SSO/OAuth capability detection (detect-only)** — `ServerFeatures` DTO (`oauth`, `passwordLogin`), `ImmichClient::server_features()` (`GET /api/server/features`), `check_server_features` command, "Detect SSO" button in ServerSettings. Groundwork for the full OAuth flow.
-- `2e1be29` **Fix password login endpoint** — was POSTing to `/auth/login` instead of `/api/auth/login` (Immich mounts everything under `/api`), so login 404'd regardless of credentials.
-- `b3d4542` **Auth diagnostics logging + full error chain** — `login()` logs at every stage (attempt, endpoint, response status, 401, decode, success) with `{:#}` formatting so the full anyhow cause chain prints. `login_with_password` maps errors with `format!("{e:#}")` so the UI shows the real cause, not just "login request failed".
-- `23f717a` **Load albums + advance onboarding for password auth** — album loading/creation and the onboarding checklist were gated on `config.has_api_key` (always false for password users). Fixed with the `isConfigured` check (server_url + (api_key OR password)) in `FolderSettings` and `Onboarding`.
-- `b0606d7` **Album reconciliation + shared `isServerConfigured` helper** — `uploaded_assets(path, asset_id, album_id)` table for path→asset tracking; `record_uploaded` in `process_one`; `reconcile_folder_album` on reassign (bulk add/remove, batched at 250); `reorganize_albums` command + frontend button; `remove_from_album` client method; shared `isServerConfigured()` helper replacing 3 inline copies.
-- `5ee32dd` **Album organization modes (off/device/folder)** — `AlbumMode` enum with `#[derive(Default)]`; `album_mode` + `device_album_id` config fields; mode-aware `album_for_path` resolver with precedence (explicit > device > folder > off); lazy `resolve_album_by_name` with in-memory cache; segmented control in FolderSettings.
+### Agreed scope (first cut)
 
-### Verified live against a real server
-Password login confirmed working against `http://192.168.2.119:2283` (user is admin). Diagnostics emit correctly to stdout + `~/Library/Logs/com.immichbeam.desktop/immich-beam.log`.
+Grid + albums + search + download:
+- Paginated thumbnail **grid** of server assets (timeline).
+- **Albums** browsing (reuse existing `GET /api/albums`).
+- **Search** (filename / metadata).
+- **Lightbox** full-size view.
+- **Download** original to disk.
 
-## Current release/update posture
+Thumbnail-delivery mechanism (base64 command vs custom URI scheme) is **deferred
+to plan mode** — see "Open design decision" below.
 
-Manual-update mode (intentional — private repo can't serve anonymous update feeds):
-- `IN_APP_UPDATES_ENABLED = false` in `src/lib/release.ts`.
-- Reflected in `src/lib/release.ts`, `src/components/About.tsx`, `docs/RELEASE_SECRETS.md`, `docs/RELEASING.md`, `README.md`.
-- Updater pubkey/endpoint in `src-tauri/tauri.conf.json` are placeholders; only needed if moving off manual mode.
-- Optional future: macOS notarization, Windows code-signing (not wired).
+## What this project is (durable context)
 
-## Secrets
+Cross-platform Tauri v2 + React 19 + Rust desktop sync client for Immich
+(self-hosted photo server). Rust sync engine (streaming uploads, SHA1 hash cache
+in SQLite, TOFU cert pinning, file watcher via notify, Live Photo pairing, XMP
+sidecars, free-up-space). React frontend with a sectioned sidebar.
 
-Only release-signing values are relevant; tracked example `.env.release.local.example`, explained in `docs/RELEASE_SECRETS.md`:
-- `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (placeholders, not in repo).
-- The Immich API key / password live in the OS keychain, NOT in `.env`. The app does not load `.env` at runtime.
+- Manual-update mode is intentional (private repo can't serve anonymous feeds):
+  `IN_APP_UPDATES_ENABLED = false` in `src/lib/release.ts`; updater
+  pubkey/endpoint in `tauri.conf.json` are placeholders.
+- Secrets: only release-signing values (`TAURI_SIGNING_PRIVATE_KEY`,
+  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`) are relevant; see `docs/RELEASE_SECRETS.md`.
+  Immich API key / password live in the OS **keychain**, not in `.env`.
 
-## Completed this arc — Album reconciliation + organization modes (v0.3.6)
+## Integration points for the new feature
 
-Both stages shipped on `main`, each committed green (`tsc` + `cargo test` + `clippy`):
+Verified against the current tree — these are exactly where the browser wires in:
 
-- **Stage 1** (`b0606d7`): `uploaded_assets` table, `record_uploaded`/`assets_for_folder`/`update_uploaded_album` in db.rs, `remove_from_album` client method, engine reconciliation on folder album reassign, `reorganize_albums` command + frontend button, shared `isServerConfigured()` helper.
-- **Stage 2** (`5ee32dd`): `AlbumMode` enum (off/device/folder), config fields (`album_mode`, `device_album_id`), mode-aware `album_for_path` resolver, lazy `resolve_album_by_name` with cache, segmented control in FolderSettings.tsx.
+**Frontend**
+- Navigation: `Tab` union + `SECTIONS` in `src/components/Sidebar.tsx:21,38`.
+- Render switch + titles: `src/App.tsx:22` (`TITLES`) and `src/App.tsx:172` (the
+  `{tab === "x" && <X/>}` block).
+- IPC wrappers: `api` + `events` in `src/lib/tauri.ts:28,113`.
+- Shared types: `src/types.ts`.
+- Gate the view on the server being configured, like the rest of the app:
+  `isServerConfigured()` in `src/lib/config.ts`.
 
-## Critical research findings (don't re-research these)
+**Backend (Rust)**
+- `ImmichClient` — `src-tauri/src/api/client.rs`. Has an `authed()` header helper
+  (line 162) covering both `ApiKey` and `Bearer` auth, so new browse methods drop
+  in alongside the existing `albums()` / `me()` methods with no new auth plumbing.
+- DTOs: `src-tauri/src/api/types.rs`.
+- Commands: `src-tauri/src/commands.rs`. Commands reach the live client via
+  `State<'_, SyncEngine>` (engine owns the client; `get_albums` is the closest
+  existing template).
+- Registration: add new commands to the `tauri::generate_handler![...]` list in
+  `src-tauri/src/lib.rs:115`.
 
-Confirmed from Immich `main` source + OpenAPI spec:
-1. **Immich v3 has NO device tracking.** `deviceId`/`deviceAssetId`, the `x-immich-device-id` header, and `/api/devices` were all **removed**. The "devices" in the web UI are auth **sessions** (login browser/OS), not upload sources. There is **no server-side way** to query "assets uploaded by client X." Our `beam-<uuid>` device id is **client-side only** — don't send it expecting server grouping.
-2. **The mobile app does NOT auto-create albums per folder by default.** Per-folder albums are an opt-in, **mobile-only** "Album Sync" setting (exact-name match/merge, one-way, with a "Reorganize into album" backfill button). External Libraries have no auto-album. ⇒ Our `album_mode` defaults to `off` to match.
-3. **Album reconciliation must use our local DB** (path→asset_id), since the server can't answer it. Useful server endpoints we're not yet using: `PUT /api/albums/assets` (bulk add many→many), `DELETE /api/albums/{id}/assets` (bulk remove), `POST /api/search/metadata` with `isNotInAlbum:true`.
-4. **OAuth loopback flow** (designed, not built — see TODO §7): `POST /api/oauth/authorize` (needs `cookies` feature on reqwest) → system browser → loopback `TcpListener` captures `code&state` → `POST /api/oauth/callback` `{url}` replaying cookies → `LoginResponse`. Deferred until an OAuth-configured server is confirmed.
+**Immich server endpoints needed (confirmed from the project's own research notes
++ OpenAPI; don't re-research)**
+- `POST /api/search/metadata` — `{ page, size, withExif }` →
+  `{ assets: { items: [AssetResponseDto…], nextPage } }`. The timeline/grid source.
+- `GET /api/assets/{id}/thumbnail?size=preview|thumbnail` — JPEG bytes (auth req'd).
+- `GET /api/assets/{id}/original` — original file bytes (download).
+- `GET /api/albums` already wrapped (`ImmichClient::albums`, `api.getAlbums`).
 
-## Known limitations / follow-ups
+## Open design decision (resolve in plan mode)
 
-1. **OAuth full flow not built** — detect-only is in place; full loopback flow deferred.
-2. **Clippy: 7 individual warnings, all pre-existing** (ConflictPolicy/AuthMethodConfig Default-derive style, `upload_asset` 9-arg count, `Default::default()` field assignment, manual `is_multiple_of`, `io::Error::other`, `u64` cast). Consistent with the project's "clippy passes with warnings" tolerance.
+**How thumbnails reach the webview** — shapes the whole component layer:
+
+| | A. Base64 command | B. Custom URI scheme |
+|---|---|---|
+| Effort | Small | Medium |
+| Perf (large grid) | Poor (~33% bloat, 1 invoke/tile) | Good (webview-cached) |
+| Auth | ApiKey + Bearer, trivially | Header injected in Rust handler |
+
+Lean: start with **A** (matches existing IPC patterns, fastest to a working
+grid), structure the component so **B** is a drop-in swap later.
 
 ## Useful commands
 
 ```bash
-# Frontend + backend checks
-pnpm build                      # tsc && vite build
+pnpm build                      # tsc && vite build  (frontend typecheck + build)
 npx tsc --noEmit
-cargo test                     # from src-tauri/  (29 tests)
-cargo clippy --no-deps --all-targets
-
-# Run the app (hot-reload; frontend on :1420, Rust rebuilds on src-tauri changes)
-pnpm tauri dev
-
-# Live logs (macOS): stdout in the terminal that ran `pnpm tauri dev`, plus
-tail -f ~/Library/Logs/com.immichbeam.desktop/immich-beam.log
-
-# GitHub Actions
-gh run list --repo nickdwhite/immich-beam --limit 10
-gh workflow run Release --repo nickdwhite/immich-beam
-gh run watch --repo nickdwhite/immich-beam <run-id>
-
-# Cut a tagged release
-git tag v0.3.5
-git push origin v0.3.5
+cargo test                      # from src-tauri/
+cargo clippy --no-deps --all-targets   # passes with known pre-existing warnings
+pnpm tauri dev                  # run the app (frontend :1420, Rust hot-rebuild)
+gh pr create --base main --head feat/remote-browser   # when ready to PR
 ```
-
-## Suggested next objective
-
-1. **OAuth full loopback flow** (if a server with SSO is available) — detect-only is in place; see `docs/TODO.md §7 OAuth`.
-2. Or pick another roadmap item from `docs/TODO.md`.
