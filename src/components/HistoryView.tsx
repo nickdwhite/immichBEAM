@@ -3,6 +3,7 @@ import { ExternalLink, FolderOpen, RotateCcw, Trash2 } from "lucide-react";
 import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import clsx from "clsx";
 import { api, onHistoryChanged } from "../lib/tauri";
+import { fmtBytes } from "../lib/format";
 import { useFailed } from "../hooks/useQueue";
 import { useToast } from "./Toast";
 import type { HistoryItem, ItemStatus } from "../types";
@@ -148,9 +149,17 @@ export function HistoryView({ serverUrl }: { serverUrl: string }) {
                 <tr key={h.id} className="bg-white dark:bg-slate-900">
                   <td className="max-w-xs px-3 py-2">
                     <div className="flex items-center gap-1.5">
-                      <span className="truncate" title={h.id}>
+                      <span
+                        className="truncate"
+                        title={`${h.id}${h.size ? ` (${fmtBytes(h.size)})` : ""}`}
+                      >
                         {h.filename}
                       </span>
+                      {h.size > 0 && (
+                        <span className="shrink-0 text-[11px] text-slate-400">
+                          {fmtBytes(h.size)}
+                        </span>
+                      )}
                       <button
                         onClick={() => revealItemInDir(h.id).catch(() => {})}
                         title={`Reveal in file manager\n${h.id}`}

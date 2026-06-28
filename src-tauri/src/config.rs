@@ -117,10 +117,41 @@ pub struct AppConfig {
     /// Delete rotated log files older than this many days (0 = keep forever).
     #[serde(default = "default_log_retention_days")]
     pub log_retention_days: u32,
+
+    #[serde(default = "default_poll_interval_secs")]
+    pub poll_interval_secs: u32,
+
+    #[serde(default = "default_health_probe_secs")]
+    pub health_probe_secs: u32,
+
+    #[serde(default)]
+    pub follow_symlinks: bool,
+
+    #[serde(default = "default_debounce_secs")]
+    pub debounce_secs: u32,
+
+    #[serde(default = "default_max_retries")]
+    pub max_retries: u32,
 }
 
 fn default_log_retention_days() -> u32 {
     30
+}
+
+fn default_poll_interval_secs() -> u32 {
+    30
+}
+
+fn default_health_probe_secs() -> u32 {
+    60
+}
+
+fn default_debounce_secs() -> u32 {
+    2
+}
+
+fn default_max_retries() -> u32 {
+    5
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -190,6 +221,11 @@ impl Default for AppConfig {
             album_mode: AlbumMode::default(),
             device_album_id: None,
             log_retention_days: default_log_retention_days(),
+            poll_interval_secs: default_poll_interval_secs(),
+            health_probe_secs: default_health_probe_secs(),
+            follow_symlinks: false,
+            debounce_secs: default_debounce_secs(),
+            max_retries: default_max_retries(),
         }
     }
 }

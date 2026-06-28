@@ -61,6 +61,7 @@ pub struct HistoryItem {
     pub status: String,
     pub uploaded_at: i64,
     pub reason: Option<String>,
+    pub size: i64,
 }
 
 #[derive(Debug, Clone)]
@@ -73,7 +74,20 @@ pub struct UploadedAsset {
 impl Db {
     /// Open (creating if needed) the database at the default app location.
     pub fn open_default() -> Result<Self> {
-        let path = AppConfig::app_dir()?.join("dock.db");
+        let dir = AppConfig::app_dir()?;
+        let path = dir.join("immich-beam.db");
+        let old = dir.join("dock.db");
+        let should_migrate = old.exists()
+            && (!path.exists() || std::fs::metadata(&path).map_or(0, |m| m.len()) == 0);
+        if should_migrate {
+            let _ = std::fs::remove_file(&path);
+            let _ = std::fs::rename(&old, &path);
+            for suffix in &["-shm", "-wal"] {
+                let from = dir.join(format!("dock.db{suffix}"));
+                let to = dir.join(format!("immich-beam.db{suffix}"));
+                let _ = std::fs::rename(&from, &to);
+            }
+        }
         Self::open(&path)
     }
 
@@ -163,6 +177,44 @@ impl Db {
             [],
         );
         let _ = conn.execute("ALTER TABLE upload_history ADD COLUMN reason TEXT", []);
+        let _ = conn.execute(
+            "ALTER TABLE upload_history ADD COLUMN size INTEGER NOT NULL DEFAULT 0",
+            [],
+        );
+        let _ = conn.execute_batch(
+            "INSERT OR IGNORE INTO upload_history(id, filename, asset_id, status, uploaded_at, reason)
+             SELECT ua.path, h.filename, h.asset_id, h.status, h.uploaded_at, h.reason
+             FROM upload_history h
+             JOIN uploaded_assets ua ON ua.asset_id = h.asset_id
+             WHERE h.id NOT LIKE '/%';
+
+             DELETE FROM upload_history
+             WHERE id NOT LIKE '/%'
+               AND asset_id IS NOT NULL
+               AND EXISTS (
+                 SELECT 1 FROM uploaded_assets ua
+                 WHERE ua.asset_id = upload_history.asset_id
+               );
+
+             INSERT OR IGNORE INTO upload_history(id, filename, asset_id, status, uploaded_at, reason)
+             SELECT fh.path, h.filename, h.asset_id, h.status, h.uploaded_at, h.reason
+             FROM upload_history h
+             JOIN file_hashes fh ON fh.path LIKE '%/' || h.filename
+             WHERE h.id NOT LIKE '/%';
+
+             DELETE FROM upload_history
+             WHERE id NOT LIKE '/%'
+               AND EXISTS (
+                 SELECT 1 FROM file_hashes fh
+                 WHERE fh.path LIKE '%/' || upload_history.filename
+               );
+
+             UPDATE upload_history SET size = (
+                 SELECT fh.size FROM file_hashes fh WHERE fh.path = upload_history.id
+             )
+             WHERE size = 0
+               AND EXISTS (SELECT 1 FROM file_hashes fh WHERE fh.path = upload_history.id);",
+        );
         Ok(())
     }
 
@@ -482,13 +534,14 @@ impl Db {
         asset_id: Option<&str>,
         status: &str,
         reason: Option<&str>,
+        size: i64,
     ) -> Result<()> {
         let conn = self.conn()?;
         let now = chrono::Utc::now().timestamp();
         conn.execute(
-            "INSERT OR REPLACE INTO upload_history(id, filename, asset_id, status, uploaded_at, reason)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![id, filename, asset_id, status, now, reason],
+            "INSERT OR REPLACE INTO upload_history(id, filename, asset_id, status, uploaded_at, reason, size)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![id, filename, asset_id, status, now, reason, size],
         )?;
         Ok(())
     }
@@ -529,7 +582,7 @@ impl Db {
     pub fn list_history(&self, limit: u32, status: Option<&str>) -> Result<Vec<HistoryItem>> {
         let conn = self.conn()?;
         let mut stmt = conn.prepare(
-            "SELECT id, filename, asset_id, status, uploaded_at, reason
+            "SELECT id, filename, asset_id, status, uploaded_at, reason, size
              FROM upload_history
              WHERE (?2 IS NULL OR status = ?2)
              ORDER BY uploaded_at DESC LIMIT ?1",
@@ -543,6 +596,7 @@ impl Db {
                     status: row.get(3)?,
                     uploaded_at: row.get(4)?,
                     reason: row.get(5)?,
+                    size: row.get(6)?,
                 })
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -673,9 +727,9 @@ mod tests {
     #[test]
     fn history_stats_counts_by_status() {
         let db = mem();
-        db.add_history("h1", "a.jpg", Some("x"), status::SUCCESS, None).unwrap();
-        db.add_history("h2", "b.jpg", None, status::DUPLICATE, None).unwrap();
-        db.add_history("h3", "c.jpg", None, status::FAILED, Some("boom")).unwrap();
+        db.add_history("h1", "a.jpg", Some("x"), status::SUCCESS, None, 1000).unwrap();
+        db.add_history("h2", "b.jpg", None, status::DUPLICATE, None, 2000).unwrap();
+        db.add_history("h3", "c.jpg", None, status::FAILED, Some("boom"), 500).unwrap();
         let s = db.history_stats().unwrap();
         assert_eq!(s.total, 3);
         assert_eq!(s.success, 1);

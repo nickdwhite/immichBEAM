@@ -17,10 +17,8 @@ use crate::config::{AlbumMode, AppConfig, AuthMethodConfig, ConflictPolicy};
 use crate::db::{status, Db};
 use crate::sync::hasher::{hash_file, hash_file_with_progress};
 use crate::sync::queue::{BandwidthLimiter, SyncState, SyncStatus};
-use crate::sync::watcher::{scan_folder, FileEvent, FolderWatcher};
+use crate::sync::watcher::{scan_folder, FileEvent, FolderWatcher, WatcherSettings};
 
-/// Max upload attempts before an item is marked dead.
-const MAX_RETRIES: i64 = 5;
 /// Max asset ids sent in one album-add request.
 const ALBUM_BATCH: u32 = 250;
 /// Flush queued album-adds once this many have accumulated (the rest flush when
@@ -170,7 +168,14 @@ impl SyncEngine {
 
     async fn start_watcher(&self, tx: mpsc::UnboundedSender<FileEvent>) {
         let folders = self.enabled_folders().await;
-        match FolderWatcher::start(&folders, tx) {
+        let cfg = self.inner.config.lock().await;
+        let settings = WatcherSettings {
+            debounce_secs: cfg.debounce_secs,
+            poll_interval_secs: cfg.poll_interval_secs,
+            health_probe_secs: cfg.health_probe_secs,
+        };
+        drop(cfg);
+        match FolderWatcher::start(&folders, tx, settings) {
             Ok(w) => {
                 *self.inner.watcher.lock().await = Some(w);
             }
@@ -236,10 +241,13 @@ impl SyncEngine {
     /// Initial scan of all enabled folders.
     pub async fn scan_all(&self) {
         let folders = self.enabled_folders().await;
-        let ext_set = self.inner.config.lock().await.extension_set();
+        let cfg = self.inner.config.lock().await;
+        let ext_set = cfg.extension_set();
+        let follow = cfg.follow_symlinks;
+        drop(cfg);
         let (mut queued, mut already, mut filtered, mut content_skipped) = (0, 0, 0, 0);
         for (folder, recursive) in folders {
-            let files = tokio::task::spawn_blocking(move || scan_folder(&folder, recursive))
+            let files = tokio::task::spawn_blocking(move || scan_folder(&folder, recursive, follow))
                 .await
                 .unwrap_or_default();
             for path in files {
@@ -306,7 +314,8 @@ impl SyncEngine {
              aren't (looks like text/source, e.g. TypeScript)"
         );
         let db = &self.inner.db;
-        let _ = db.add_history(&p, &filename, None, status::SKIPPED, Some(reason.as_str()));
+        let size = std::fs::metadata(path).map(|m| m.len() as i64).unwrap_or(0);
+        let _ = db.add_history(&p, &filename, None, status::SKIPPED, Some(reason.as_str()), size);
         self.log_debug(&format!("content check skipped: {p}"));
     }
 
@@ -433,6 +442,7 @@ impl SyncEngine {
                     Some(&resp.id),
                     status::SUCCESS,
                     Some("Live Photo video"),
+                    fh.size,
                 );
                 Some(resp.id)
             }
@@ -472,6 +482,7 @@ impl SyncEngine {
                 None,
                 status::SKIPPED,
                 Some("File no longer exists on disk"),
+                item.size,
             );
             let _ = db.remove_queue_item(&item.id);
             return Ok(());
@@ -491,6 +502,7 @@ impl SyncEngine {
                     None,
                     status::SKIPPED,
                     Some("Part of a Live Photo — uploaded with its still"),
+                    item.size,
                 );
                 let _ = db.remove_queue_item(&item.id);
                 return Ok(());
@@ -557,6 +569,7 @@ impl SyncEngine {
                                 r.asset_id.as_deref(),
                                 status::DUPLICATE,
                                 Some("Already on the server"),
+                                fh.size,
                             );
                         } else {
                             // e.g. "unsupported-format": this server can't ingest it.
@@ -570,6 +583,7 @@ impl SyncEngine {
                                 None,
                                 status::UNSUPPORTED,
                                 Some(unsupported_reason.as_str()),
+                                fh.size,
                             );
                         }
                         // Either outcome is final — cache so scans skip it later.
@@ -647,7 +661,7 @@ impl SyncEngine {
                 let album = self.album_for_path(&item.path).await;
                 let db = &self.inner.db;
                 let _ = db.record_uploaded(&item.path, &resp.id, album.as_deref());
-                let _ = db.add_history(&item.path, &filename, Some(&resp.id), st, None);
+                let _ = db.add_history(&item.path, &filename, Some(&resp.id), st, None, fh.size);
                 // Mark synced so future scans skip this file entirely.
                 let _ = db.put_hash(&item.path, &fh.sha1_hex, fh.size, fh.mtime);
                 let _ = db.remove_queue_item(&item.id);
@@ -726,6 +740,7 @@ impl SyncEngine {
                         None,
                         status::SKIPPED,
                         Some("File no longer exists on disk"),
+                        item.size,
                     );
                     let _ = db.remove_queue_item(&item.id);
                 })
@@ -772,8 +787,9 @@ impl SyncEngine {
         let folder = PathBuf::from(path);
         let cfg = self.inner.config.lock().await.clone();
         let ext_set = cfg.extension_set();
+        let follow = cfg.follow_symlinks;
         let mut info = FolderInspect::default();
-        let files = tokio::task::spawn_blocking(move || scan_folder(&folder, true))
+        let files = tokio::task::spawn_blocking(move || scan_folder(&folder, true, follow))
             .await
             .unwrap_or_default();
         for file in files {
@@ -826,10 +842,11 @@ impl SyncEngine {
         log::warn!("upload failed for {filename}: {msg}");
         *self.inner.last_error.lock().await = Some(format!("{filename}: {msg}"));
         let db = &self.inner.db;
-        let retries = db.mark_failed(&item.id, msg).unwrap_or(MAX_RETRIES);
-        if retries >= MAX_RETRIES {
+        let max_retries = self.inner.config.lock().await.max_retries as i64;
+        let retries = db.mark_failed(&item.id, msg).unwrap_or(max_retries);
+        if retries >= max_retries {
             let _ = db.mark_dead(&item.id, msg);
-            let _ = db.add_history(&item.path, filename, None, status::FAILED, Some(msg));
+            let _ = db.add_history(&item.path, filename, None, status::FAILED, Some(msg), item.size);
             self.inner.failed_session.fetch_add(1, Ordering::Relaxed);
             self.notify_failure(filename);
         }
@@ -1459,15 +1476,15 @@ impl SyncEngine {
         };
         let cutoff = chrono::Utc::now().timestamp() - (older_than_days as i64 * 86_400);
         let folders = self.enabled_folders().await;
-        let ext_set = self.inner.config.lock().await.extension_set();
+        let cfg = self.inner.config.lock().await;
+        let ext_set = cfg.extension_set();
+        let follow = cfg.follow_symlinks;
+        drop(cfg);
 
-        // Gather candidates, reusing the cached hash when the file is unchanged
-        // so we don't re-read already-synced files from disk.
-        // (path, size, mtime, base64 checksum)
         let mut candidates: Vec<(String, i64, i64, String)> = Vec::new();
         let mut scanned = 0usize;
         for (folder, recursive) in folders {
-            let files = tokio::task::spawn_blocking(move || scan_folder(&folder, recursive))
+            let files = tokio::task::spawn_blocking(move || scan_folder(&folder, recursive, follow))
                 .await
                 .unwrap_or_default();
             for path in files {

@@ -35,6 +35,11 @@ export interface AppConfig {
   album_mode: AlbumMode;
   device_album_id: string | null;
   log_retention_days: number;
+  poll_interval_secs: number;
+  health_probe_secs: number;
+  follow_symlinks: boolean;
+  debounce_secs: number;
+  max_retries: number;
 }
 
 export interface ConfigDto extends AppConfig {
@@ -97,6 +102,7 @@ export interface HistoryItem {
   status: ItemStatus;
   uploaded_at: number;
   reason: string | null;
+  size: number;
 }
 
 export interface Album {

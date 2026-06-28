@@ -52,16 +52,22 @@ impl Drop for FolderWatcher {
     }
 }
 
+pub struct WatcherSettings {
+    pub debounce_secs: u32,
+    pub poll_interval_secs: u32,
+    pub health_probe_secs: u32,
+}
+
 impl FolderWatcher {
-    /// Start watching `folders`. Each entry is `(path, recursive)`.
-    /// New/modified files are sent on `tx`.
-    ///
-    /// Folders where the native watcher fails (e.g. network mounts) are
-    /// automatically watched with a poll-based fallback (30 s interval).
-    pub fn start(folders: &[(PathBuf, bool)], tx: UnboundedSender<FileEvent>) -> Result<Self> {
+    pub fn start(
+        folders: &[(PathBuf, bool)],
+        tx: UnboundedSender<FileEvent>,
+        settings: WatcherSettings,
+    ) -> Result<Self> {
         let tx_poll = tx.clone();
+        let poll_interval = settings.poll_interval_secs;
         let mut debouncer = new_debouncer(
-            Duration::from_secs(2),
+            Duration::from_secs(settings.debounce_secs.max(1) as u64),
             None,
             move |result: notify_debouncer_full::DebounceEventResult| match result {
                 Ok(events) => {
@@ -111,7 +117,7 @@ impl FolderWatcher {
                         folder.display(),
                         e
                     );
-                    match start_poll_watcher(folder, mode, tx_poll.clone()) {
+                    match start_poll_watcher(folder, mode, tx_poll.clone(), poll_interval) {
                         Ok(pw) => {
                             poll_watchers.push(pw);
                             entries.push(WatchedEntry {
@@ -134,9 +140,10 @@ impl FolderWatcher {
         let alive = Arc::new(AtomicBool::new(true));
         let health_alive = alive.clone();
         let health_entries: Vec<PathBuf> = entries.iter().map(|e| e.path.clone()).collect();
+        let health_interval = settings.health_probe_secs;
         std::thread::Builder::new()
             .name("watcher-health".into())
-            .spawn(move || health_probe(health_alive, health_entries))?;
+            .spawn(move || health_probe(health_alive, health_entries, health_interval))?;
 
         Ok(Self {
             debouncer,
@@ -147,14 +154,14 @@ impl FolderWatcher {
     }
 }
 
-/// Start a poll-based watcher for a single folder.
 fn start_poll_watcher(
     folder: &Path,
     mode: RecursiveMode,
     tx: UnboundedSender<FileEvent>,
+    poll_secs: u32,
 ) -> Result<notify::PollWatcher> {
     use notify::Config;
-    let config = Config::default().with_poll_interval(Duration::from_secs(30));
+    let config = Config::default().with_poll_interval(Duration::from_secs(poll_secs.max(5) as u64));
     let mut watcher = notify::PollWatcher::new(
         move |result: std::result::Result<notify::Event, notify::Error>| match result {
             Ok(event) => {
@@ -175,18 +182,18 @@ fn start_poll_watcher(
         config,
     )?;
     watcher.watch(folder, mode)?;
-    log::info!("poll-watching {} (30 s interval)", folder.display());
+    log::info!("poll-watching {} ({poll_secs} s interval)", folder.display());
     Ok(watcher)
 }
 
 /// Periodic probe that logs warnings when watched folders become unreachable
 /// (mount dropped, directory deleted, etc.). Runs until `alive` is cleared.
-fn health_probe(alive: Arc<AtomicBool>, folders: Vec<PathBuf>) {
-    const INTERVAL: Duration = Duration::from_secs(60);
+fn health_probe(alive: Arc<AtomicBool>, folders: Vec<PathBuf>, interval_secs: u32) {
+    let interval = Duration::from_secs(interval_secs.max(10) as u64);
     let mut last_ok: HashMap<PathBuf, Instant> = HashMap::new();
 
     while alive.load(Ordering::Relaxed) {
-        std::thread::sleep(INTERVAL);
+        std::thread::sleep(interval);
         if !alive.load(Ordering::Relaxed) {
             break;
         }
@@ -224,8 +231,8 @@ fn forward_event(ev: &DebouncedEvent, tx: &UnboundedSender<FileEvent>) {
 
 /// Enumerate existing files in a folder (the initial scan).
 /// When `recursive` is false, only top-level files are returned.
-pub fn scan_folder(folder: &Path, recursive: bool) -> Vec<PathBuf> {
-    let mut walker = WalkDir::new(folder).follow_links(false);
+pub fn scan_folder(folder: &Path, recursive: bool, follow_symlinks: bool) -> Vec<PathBuf> {
+    let mut walker = WalkDir::new(folder).follow_links(follow_symlinks);
     if !recursive {
         walker = walker.max_depth(1);
     }
