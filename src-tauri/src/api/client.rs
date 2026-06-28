@@ -534,6 +534,72 @@ impl ImmichClient {
             .error_for_status()?;
         Ok(())
     }
+
+    /// `POST /api/search/metadata` — one page of the asset timeline/grid.
+    /// `asset_type` filters to `"IMAGE"` or `"VIDEO"` (None = both). `size` is
+    /// clamped to the server max of 250.
+    pub async fn search_assets(
+        &self,
+        page: u32,
+        size: u32,
+        asset_type: Option<&str>,
+    ) -> Result<MetadataSearchResponse> {
+        let mut body = serde_json::json!({
+            "page": page,
+            "size": size.min(250),
+            "withExif": false,
+            "isArchived": false,
+            "isTrashed": false,
+        });
+        if let Some(t) = asset_type {
+            body["type"] = serde_json::Value::String(t.to_string());
+        }
+        let resp = self
+            .authed(self.http.post(self.url("/api/search/metadata")))
+            .json(&body)
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(resp.json().await?)
+    }
+
+    /// `GET /api/assets/{id}/thumbnail?size=` — raw image bytes for the
+    /// browser grid/lightbox. `size` is `"thumbnail"`, `"preview"`, or `"full"`.
+    pub async fn thumbnail(&self, asset_id: &str, size: &str) -> Result<Vec<u8>> {
+        let path = format!(
+            "/api/assets/{}/thumbnail?size={}",
+            encode_path_segment(asset_id),
+            encode_path_segment(size),
+        );
+        let resp = self
+            .authed(self.http.get(self.url(&path)))
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(resp.bytes().await?.to_vec())
+    }
+
+    /// `GET /api/albums/{id}` — an album with its assets, for "open album".
+    pub async fn album_assets(&self, album_id: &str) -> Result<AlbumAssetsResponse> {
+        let path = format!("/api/albums/{}", encode_path_segment(album_id));
+        let resp = self
+            .authed(self.http.get(self.url(&path)))
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(resp.json().await?)
+    }
+
+    /// `GET /api/assets/{id}/original` — streaming download response; the
+    /// caller streams the body to the destination file.
+    pub async fn download_asset(&self, asset_id: &str) -> Result<reqwest::Response> {
+        let path = format!("/api/assets/{}/original", encode_path_segment(asset_id));
+        Ok(self
+            .authed(self.http.get(self.url(&path)))
+            .send()
+            .await?
+            .error_for_status()?)
+    }
 }
 
 /// Encode raw SHA1 bytes as Base64 (for bulk-upload-check).

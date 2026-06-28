@@ -125,3 +125,105 @@ pub struct ConnectionInfo {
     pub insecure: bool,
     pub message: String,
 }
+
+// ---- Remote browser (download direction) -------------------------------
+
+/// A minimal asset representation for the remote browser, returned by
+/// `POST /api/search/metadata` and `GET /api/albums/{id}`. Optional fields use
+/// `#[serde(default)]` so forward-compatible server additions don't break
+/// decoding; we render only what's modeled here.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct BrowseAsset {
+    pub id: String,
+    /// "IMAGE" | "VIDEO" (Immich uses the `type` field, renamed here).
+    #[serde(rename = "type", default)]
+    pub asset_type: String,
+    #[serde(rename = "originalFileName", default)]
+    pub original_file_name: Option<String>,
+    #[serde(rename = "originalMimeType", default)]
+    pub original_mime_type: Option<String>,
+    #[serde(rename = "fileCreatedAt", default)]
+    pub file_created_at: Option<String>,
+    /// Base64-encoded placeholder rendered behind a tile while its thumbnail loads.
+    #[serde(default)]
+    pub thumbhash: Option<String>,
+    /// Video duration string, e.g. "0:00:12.34500" (absent for images).
+    #[serde(default)]
+    pub duration: Option<String>,
+    #[serde(rename = "isFavorite", default)]
+    pub is_favorite: bool,
+    #[serde(rename = "livePhotoVideoId", default)]
+    pub live_photo_video_id: Option<String>,
+}
+
+/// One page of search results (the `assets` block of the search response).
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct SearchAssetPage {
+    #[serde(default)]
+    pub items: Vec<BrowseAsset>,
+    /// Cursor token for the next page (None when exhausted). The browser drives
+    /// numeric `page` primarily; this is an additional end-of-results signal.
+    #[serde(rename = "nextPage", default)]
+    pub next_page: Option<String>,
+    #[serde(default)]
+    pub total: Option<u64>,
+}
+
+/// `POST /api/search/metadata` response. Only the `assets` block is consumed.
+#[derive(Debug, Clone, Deserialize)]
+pub struct MetadataSearchResponse {
+    #[serde(default)]
+    pub assets: SearchAssetPage,
+}
+
+/// `GET /api/albums/{id}` response, trimmed to what the browser needs.
+#[derive(Debug, Clone, Deserialize)]
+pub struct AlbumAssetsResponse {
+    #[serde(default)]
+    pub assets: SearchAssetPage,
+    #[serde(rename = "albumName", default)]
+    pub album_name: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn metadata_search_response_decodes() {
+        let json = r#"{
+            "albums": {"total": 0, "count": 0, "items": [], "nextPage": null},
+            "assets": {
+                "total": 2,
+                "count": 2,
+                "items": [
+                    {"id": "a1", "type": "IMAGE", "originalFileName": "cat.jpg",
+                     "fileCreatedAt": "2024-01-02T03:04:05.000Z", "isFavorite": true},
+                    {"id": "v1", "type": "VIDEO", "originalFileName": "clip.mov",
+                     "duration": "0:00:05.00000", "thumbhash": "AA=="}
+                ],
+                "nextPage": "CURSOR"
+            }
+        }"#;
+        let resp: MetadataSearchResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(resp.assets.items.len(), 2);
+        assert_eq!(resp.assets.items[0].asset_type, "IMAGE");
+        assert!(resp.assets.items[0].is_favorite);
+        assert_eq!(resp.assets.items[1].asset_type, "VIDEO");
+        assert_eq!(
+            resp.assets.items[1].duration.as_deref(),
+            Some("0:00:05.00000")
+        );
+        assert_eq!(resp.assets.next_page.as_deref(), Some("CURSOR"));
+    }
+
+    #[test]
+    fn browse_asset_tolerates_missing_fields() {
+        let json = r#"{"id": "x"}"#;
+        let a: BrowseAsset = serde_json::from_str(json).unwrap();
+        assert_eq!(a.id, "x");
+        assert_eq!(a.asset_type, "");
+        assert!(!a.is_favorite);
+        assert!(a.duration.is_none());
+    }
+}
