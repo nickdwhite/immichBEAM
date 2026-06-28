@@ -5,6 +5,8 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   Album,
   AppConfig,
+  BrowseAsset,
+  BrowsePage,
   ConfigDto,
   ConnectionInfo,
   FolderInspect,
@@ -106,6 +108,17 @@ export const api = {
 
   checkForUpdate: () => invoke<UpdateInfo>("check_for_update"),
   installUpdate: () => invoke<void>("install_update"),
+
+  browseAssets: (page: number, size: number, assetType?: string) =>
+    invoke<BrowsePage>("browse_assets", {
+      page,
+      size,
+      assetType: assetType ?? null,
+    }),
+  browseAlbumAssets: (albumId: string) =>
+    invoke<BrowseAsset[]>("browse_album_assets", { albumId }),
+  downloadAsset: (assetId: string, destination: string) =>
+    invoke<void>("download_asset", { assetId, destination }),
 };
 
 // ---- events -------------------------------------------------------------

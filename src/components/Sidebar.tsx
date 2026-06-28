@@ -2,6 +2,7 @@ import {
   FolderSync,
   HardDrive,
   History,
+  Images,
   Info,
   LayoutDashboard,
   ListChecks,
@@ -19,6 +20,7 @@ import { useFreeableRunning } from "../hooks/useFreeable";
 import type { SyncStatus } from "../types";
 
 export type Tab =
+  | "browse"
   | "overview"
   | "queue"
   | "history"
@@ -36,6 +38,10 @@ interface NavItem {
 }
 
 const SECTIONS: { title: string; items: NavItem[] }[] = [
+  {
+    title: "Library",
+    items: [{ id: "browse", label: "Browse", Icon: Images }],
+  },
   {
     title: "Activity",
     items: [

@@ -183,3 +183,24 @@ export interface UpdateProgress {
   total: number | null;
   pct: number;
 }
+
+// ---- Remote browser (download direction) -------------------------------
+// Field names mirror the serde-renamed shape the Rust backend serializes
+// (see BrowseAsset in src-tauri/src/api/types.rs), NOT the Rust field names.
+
+export interface BrowseAsset {
+  id: string;
+  type: string; // "IMAGE" | "VIDEO"
+  originalFileName: string | null;
+  originalMimeType: string | null;
+  fileCreatedAt: string | null;
+  thumbhash: string | null;
+  duration: string | null;
+  isFavorite: boolean;
+  livePhotoVideoId: string | null;
+}
+
+export interface BrowsePage {
+  items: BrowseAsset[];
+  nextPage: string | null;
+}
