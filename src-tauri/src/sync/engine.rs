@@ -13,7 +13,7 @@ use uuid::Uuid;
 
 use crate::api::{sha1_to_base64, BulkCheckItem, ImmichClient};
 use crate::api::client::AuthMethod;
-use crate::config::{AppConfig, AuthMethodConfig, ConflictPolicy};
+use crate::config::{AlbumMode, AppConfig, AuthMethodConfig, ConflictPolicy};
 use crate::db::{status, Db};
 use crate::sync::hasher::{hash_file, hash_file_with_progress};
 use crate::sync::queue::{BandwidthLimiter, SyncState, SyncStatus};
@@ -82,6 +82,8 @@ struct Inner {
     /// Timestamp (ms) of the last refresh attempt; throttles re-logins so a
     /// persistently failing login isn't retried every loop.
     last_refresh_ms: AtomicU64,
+    /// Cache of album-name → album-id for lazy create-or-find.
+    album_name_cache: Mutex<std::collections::HashMap<String, String>>,
 }
 
 /// Cheaply-cloneable handle to the running engine.
@@ -132,6 +134,7 @@ impl SyncEngine {
             removable: Mutex::new(Some(monitor)),
             refresh_lock: Mutex::new(()),
             last_refresh_ms: AtomicU64::new(0),
+            album_name_cache: Mutex::new(std::collections::HashMap::new()),
         });
         Self { inner }
     }
@@ -879,15 +882,97 @@ impl SyncEngine {
         })
     }
 
-    /// Find the album id configured for the watched folder containing `path`.
+    /// Find the album id for `path` using the precedence:
+    /// 1. Folder's explicit `album_id` (dropdown override)
+    /// 2. `AlbumMode::Device` → one album named after this machine's hostname
+    /// 3. `AlbumMode::Folder` → album named after the watched folder's basename
+    /// 4. `AlbumMode::Off` → None
     async fn album_for_path(&self, path: &str) -> Option<String> {
         let file = PathBuf::from(path);
         let cfg = self.inner.config.lock().await;
-        cfg.folders
+        let folder = cfg
+            .folders
             .iter()
-            .filter(|f| f.enabled && f.album_id.is_some())
-            .find(|f| file.starts_with(&f.path))
-            .and_then(|f| f.album_id.clone())
+            .filter(|f| f.enabled)
+            .find(|f| file.starts_with(&f.path))?;
+
+        if let Some(id) = &folder.album_id {
+            return Some(id.clone());
+        }
+
+        match cfg.album_mode {
+            AlbumMode::Off => None,
+            AlbumMode::Device => {
+                if let Some(id) = &cfg.device_album_id {
+                    return Some(id.clone());
+                }
+                let name = hostname::get()
+                    .ok()
+                    .and_then(|h| h.into_string().ok())
+                    .unwrap_or_else(|| "Unknown Device".into());
+                drop(cfg);
+                self.resolve_album_by_name(&name).await
+            }
+            AlbumMode::Folder => {
+                let name = PathBuf::from(&folder.path)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("Uploads")
+                    .to_string();
+                drop(cfg);
+                self.resolve_album_by_name(&name).await
+            }
+        }
+    }
+
+    /// Find an existing album by exact name or create one. Caches the id so
+    /// repeated uploads to the same folder don't hit the server each time.
+    async fn resolve_album_by_name(&self, name: &str) -> Option<String> {
+        {
+            let cache = self.inner.album_name_cache.lock().await;
+            if let Some(id) = cache.get(name) {
+                return Some(id.clone());
+            }
+        }
+        let client = self.client().await?;
+        let albums = client.albums().await.ok()?;
+        if let Some(found) = albums.iter().find(|a| a.album_name == name) {
+            let id = found.id.clone();
+            self.inner
+                .album_name_cache
+                .lock()
+                .await
+                .insert(name.to_string(), id.clone());
+            self.cache_device_album_if_needed(name, &id).await;
+            return Some(id);
+        }
+        match client.create_album(name).await {
+            Ok(album) => {
+                log::info!("created album '{}' ({})", name, album.id);
+                let id = album.id.clone();
+                self.inner
+                    .album_name_cache
+                    .lock()
+                    .await
+                    .insert(name.to_string(), id.clone());
+                self.cache_device_album_if_needed(name, &id).await;
+                Some(id)
+            }
+            Err(e) => {
+                log::warn!("failed to create album '{name}': {e}");
+                None
+            }
+        }
+    }
+
+    /// If `album_mode == Device`, persist the resolved id so restarts don't
+    /// re-query the server.
+    async fn cache_device_album_if_needed(&self, _name: &str, id: &str) {
+        let mut cfg = self.inner.config.lock().await;
+        if cfg.album_mode == AlbumMode::Device && cfg.device_album_id.is_none() {
+            cfg.device_album_id = Some(id.to_string());
+            let _ = cfg.save();
+        }
     }
 
     /// Flush queued album memberships in batched PUTs. Rows are only removed
@@ -1075,7 +1160,7 @@ impl SyncEngine {
     /// Apply a new configuration: rebuild the client, restart the watcher
     /// (only if folder/filter/server settings changed), update bandwidth, etc.
     pub async fn apply_config(&self, new_config: AppConfig) {
-        let (needs_rescan, album_changes) = {
+        let (needs_rescan, album_changes, mode_changed) = {
             let old = self.inner.config.lock().await;
             let rescan = old.server_url != new_config.server_url
                 || old.allow_insecure != new_config.allow_insecure
@@ -1097,8 +1182,13 @@ impl SyncEngine {
                         })
                 })
                 .collect();
-            (rescan, changes)
+            let mode_changed = old.album_mode != new_config.album_mode;
+            (rescan, changes, mode_changed)
         };
+
+        if mode_changed {
+            self.inner.album_name_cache.lock().await.clear();
+        }
 
         self.inner
             .bandwidth

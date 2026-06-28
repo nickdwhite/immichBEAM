@@ -104,6 +104,15 @@ pub struct AppConfig {
     /// Which authentication method is active: "api_key" or "password".
     #[serde(default)]
     pub auth_method: AuthMethodConfig,
+
+    /// Album organization mode: off (manual per-folder only), device (one album
+    /// named after this machine), or folder (each folder → album by basename).
+    #[serde(default)]
+    pub album_mode: AlbumMode,
+
+    /// Cached album id for `AlbumMode::Device`.
+    #[serde(default)]
+    pub device_album_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -117,6 +126,15 @@ impl Default for AuthMethodConfig {
     fn default() -> Self {
         Self::ApiKey
     }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AlbumMode {
+    #[default]
+    Off,
+    Device,
+    Folder,
 }
 
 /// The full set of asset extensions Immich accepts (images + videos), mirroring
@@ -161,6 +179,8 @@ impl Default for AppConfig {
             notifications_enabled: true,
             conflict_policy: ConflictPolicy::default(),
             auth_method: AuthMethodConfig::default(),
+            album_mode: AlbumMode::default(),
+            device_album_id: None,
         }
     }
 }

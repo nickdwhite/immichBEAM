@@ -5,7 +5,7 @@ import { api } from "../lib/tauri";
 import { fmtBytes } from "../lib/format";
 import { isServerConfigured } from "../lib/config";
 import { useToast } from "./Toast";
-import type { Album, ConfigDto, FolderInspect } from "../types";
+import type { Album, AlbumMode, ConfigDto, FolderInspect } from "../types";
 
 const BIG_FILES = 1000;
 const BIG_BYTES = 5 * 1024 ** 3; // 5 GB
@@ -193,8 +193,51 @@ export function FolderSettings({
     }
   };
 
+  const setAlbumMode = async (mode: AlbumMode) => {
+    setBusy(true);
+    try {
+      await api.saveConfig({
+        ...config,
+        album_mode: mode,
+        device_album_id: mode !== "device" ? null : config.device_album_id,
+      });
+      onSaved();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="max-w-2xl space-y-6">
+      <div>
+        <label className="mb-2 block text-sm font-medium">Album organization</label>
+        <div className="flex rounded-lg border border-slate-200 dark:border-slate-700">
+          {(["off", "device", "folder"] as const).map((mode, i) => (
+            <button
+              key={mode}
+              onClick={() => setAlbumMode(mode)}
+              disabled={busy}
+              className={`flex-1 px-3 py-1.5 text-sm font-medium transition-colors ${
+                i === 0 ? "rounded-l-lg" : i === 2 ? "rounded-r-lg" : ""
+              } ${
+                config.album_mode === mode
+                  ? "bg-brand-600 text-white"
+                  : "text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800"
+              }`}
+            >
+              {mode === "off" ? "Off" : mode === "device" ? "Device" : "Folder"}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1 text-xs text-slate-400">
+          {config.album_mode === "off" && "Use per-folder album dropdowns only."}
+          {config.album_mode === "device" &&
+            "All uploads go to one album named after this computer."}
+          {config.album_mode === "folder" &&
+            "Each folder creates an album named after its folder."}
+        </p>
+      </div>
+
       <div>
         <div className="mb-2 flex items-center justify-between">
           <h3 className="text-sm font-medium">Watched folders</h3>

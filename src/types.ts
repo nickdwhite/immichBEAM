@@ -11,6 +11,8 @@ export type ConflictPolicy = "reupload" | "skip";
 
 export type AuthMethodConfig = "api_key" | "password";
 
+export type AlbumMode = "off" | "device" | "folder";
+
 export interface ServerFeatures {
   oauth: boolean;
   password_login: boolean;
@@ -30,6 +32,8 @@ export interface AppConfig {
   notifications_enabled: boolean;
   conflict_policy: ConflictPolicy;
   auth_method: AuthMethodConfig;
+  album_mode: AlbumMode;
+  device_album_id: string | null;
 }
 
 export interface ConfigDto extends AppConfig {
