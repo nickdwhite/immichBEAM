@@ -145,6 +145,7 @@ pub fn run() {
             commands::inspect_folder,
             commands::get_albums,
             commands::create_album,
+            commands::reorganize_albums,
             commands::suggest_folders,
             commands::start_freeable_scan,
             commands::get_freeable_state,

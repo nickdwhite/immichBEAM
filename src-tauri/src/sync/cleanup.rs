@@ -44,6 +44,13 @@ pub struct FolderInspect {
     pub total_bytes: i64,
 }
 
+/// Result of the "Reorganize into album" action.
+#[derive(Debug, Clone, Default, Serialize)]
+pub struct ReorganizeResult {
+    pub added: usize,
+    pub errors: Vec<String>,
+}
+
 /// Backend-owned state of a free-up-space scan, so it survives the UI
 /// navigating away and back.
 #[derive(Debug, Clone, Default, Serialize)]

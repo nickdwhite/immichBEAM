@@ -440,6 +440,15 @@ pub async fn create_album(
     }
 }
 
+/// Re-apply current album assignments: for every folder with a target album,
+/// bulk-add any uploaded assets that aren't already in that album.
+#[tauri::command]
+pub async fn reorganize_albums(
+    engine: State<'_, SyncEngine>,
+) -> CmdResult<crate::sync::cleanup::ReorganizeResult> {
+    Ok(engine.reorganize_albums().await)
+}
+
 /// Suggest default media folders (Pictures, Videos, etc.) that exist on this
 /// machine and haven't already been added.
 #[tauri::command]

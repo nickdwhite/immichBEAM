@@ -13,6 +13,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { api } from "../lib/tauri";
+import { isServerConfigured } from "../lib/config";
 import { SecurityBadge } from "./SecurityBadge";
 import { useToast } from "./Toast";
 import type { ConfigDto, ConnectionInfo, ServerFeatures } from "../types";
@@ -42,15 +43,17 @@ export function ServerSettings({
   const [detecting, setDetecting] = useState(false);
   const toast = useToast();
 
-  const isConfigured =
-    (config.auth_method === "api_key" && config.has_api_key) ||
-    config.auth_method === "password";
+  const isConfigured = isServerConfigured(config);
+
+  useEffect(() => {
+    setAuthTab(config.auth_method);
+  }, [config.auth_method]);
 
   const loadFingerprint = () =>
     api.getCertFingerprint().then(setFingerprint).catch(() => setFingerprint(null));
 
   useEffect(() => {
-    if (isConfigured && config.server_url) {
+    if (isConfigured) {
       api.getConnectionInfo().then(setConn).catch(() => setConn(null));
       loadFingerprint();
     } else {

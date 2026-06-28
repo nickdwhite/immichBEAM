@@ -14,6 +14,7 @@ import type {
   HistoryStats,
   ProgressPayload,
   QueueItem,
+  ReorganizeResult,
   RepairReport,
   ServerFeatures,
   SyncStatus,
@@ -87,6 +88,7 @@ export const api = {
     invoke<FolderInspect>("inspect_folder", { path }),
   getAlbums: () => invoke<Album[]>("get_albums"),
   createAlbum: (name: string) => invoke<Album>("create_album", { name }),
+  reorganizeAlbums: () => invoke<ReorganizeResult>("reorganize_albums"),
   suggestFolders: () => invoke<string[]>("suggest_folders"),
 
   startFreeableScan: (days: number) =>

@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { FolderPlus, FolderTree, Loader2, Trash2, TriangleAlert } from "lucide-react";
+import { FolderPlus, FolderTree, Loader2, RefreshCw, Trash2, TriangleAlert } from "lucide-react";
 import { api } from "../lib/tauri";
 import { fmtBytes } from "../lib/format";
+import { isServerConfigured } from "../lib/config";
 import { useToast } from "./Toast";
 import type { Album, ConfigDto, FolderInspect } from "../types";
 
@@ -25,14 +26,10 @@ export function FolderSettings({
     null,
   );
   const [stats, setStats] = useState<Record<string, FolderInspect>>({});
+  const [reorganizing, setReorganizing] = useState(false);
   const toast = useToast();
 
-  // The server is usable with either an API key OR a logged-in password
-  // session. Albums only load once this is true.
-  const isConfigured =
-    !!config.server_url &&
-    ((config.auth_method === "api_key" && config.has_api_key) ||
-      config.auth_method === "password");
+  const isConfigured = isServerConfigured(config);
 
   // Lazily compute per-folder media count + size in the background.
   useEffect(() => {
@@ -344,6 +341,44 @@ export function FolderSettings({
           Creates an empty album on your server; assign it to a folder above.
         </p>
       </div>
+
+      {config.folders.some((f) => f.album_id) && (
+        <div>
+          <button
+            onClick={async () => {
+              setReorganizing(true);
+              try {
+                const r = await api.reorganizeAlbums();
+                if (r.errors.length > 0) {
+                  toast.error(`Reorganize: ${r.errors[0]}`);
+                } else if (r.added === 0) {
+                  toast.info("All uploaded assets are already in their assigned albums");
+                } else {
+                  toast.success(
+                    `Added ${r.added} asset${r.added === 1 ? "" : "s"} to albums`,
+                  );
+                }
+              } catch (e) {
+                toast.error(`Reorganize failed: ${e}`);
+              } finally {
+                setReorganizing(false);
+              }
+            }}
+            disabled={reorganizing || busy || !isConfigured}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
+          >
+            {reorganizing ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <RefreshCw size={16} />
+            )}
+            Reorganize into albums
+          </button>
+          <p className="mt-1 text-xs text-slate-400">
+            Adds previously-uploaded assets to their folder's assigned album.
+          </p>
+        </div>
+      )}
 
       <div>
         <label className="mb-1 block text-sm font-medium">File type filter</label>

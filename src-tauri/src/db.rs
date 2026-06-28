@@ -63,6 +63,13 @@ pub struct HistoryItem {
     pub reason: Option<String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct UploadedAsset {
+    pub path: String,
+    pub asset_id: String,
+    pub album_id: Option<String>,
+}
+
 impl Db {
     /// Open (creating if needed) the database at the default app location.
     pub fn open_default() -> Result<Self> {
@@ -139,6 +146,15 @@ impl Db {
                 album_id TEXT NOT NULL,
                 PRIMARY KEY (asset_id, album_id)
             );
+
+            -- Tracks which local files have been uploaded and their current
+            -- album membership.  Used for album reconciliation (move on
+            -- reassign) and the "Reorganize into album" action.
+            CREATE TABLE IF NOT EXISTS uploaded_assets (
+                path     TEXT PRIMARY KEY,
+                asset_id TEXT NOT NULL,
+                album_id TEXT
+            );
             "#,
         )?;
         // Add columns to databases created before they existed.
@@ -211,6 +227,51 @@ impl Db {
             )?;
         }
         tx.commit()?;
+        Ok(())
+    }
+
+    // ---- uploaded assets (album reconciliation) ---------------------------
+
+    pub fn record_uploaded(&self, path: &str, asset_id: &str, album_id: Option<&str>) -> Result<()> {
+        let conn = self.conn()?;
+        conn.execute(
+            "INSERT INTO uploaded_assets(path, asset_id, album_id) VALUES (?1, ?2, ?3)
+             ON CONFLICT(path) DO UPDATE SET asset_id = ?2, album_id = ?3",
+            params![path, asset_id, album_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn assets_for_folder(&self, folder_path: &str) -> Result<Vec<UploadedAsset>> {
+        let conn = self.conn()?;
+        let prefix = if folder_path.ends_with('/') || folder_path.ends_with('\\') {
+            folder_path.to_string()
+        } else {
+            format!("{folder_path}/")
+        };
+        let prefix_end = format!("{prefix}\u{FFFF}");
+        let mut stmt = conn.prepare(
+            "SELECT path, asset_id, album_id FROM uploaded_assets
+             WHERE path >= ?1 AND path < ?2",
+        )?;
+        let items = stmt
+            .query_map(params![prefix, prefix_end], |row| {
+                Ok(UploadedAsset {
+                    path: row.get(0)?,
+                    asset_id: row.get(1)?,
+                    album_id: row.get(2)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(items)
+    }
+
+    pub fn update_uploaded_album(&self, path: &str, album_id: Option<&str>) -> Result<()> {
+        let conn = self.conn()?;
+        conn.execute(
+            "UPDATE uploaded_assets SET album_id = ?2 WHERE path = ?1",
+            params![path, album_id],
+        )?;
         Ok(())
     }
 
@@ -576,6 +637,37 @@ mod tests {
         db.remove_album_adds(&album2, &ids2).unwrap();
         assert_eq!(db.pending_album_total().unwrap(), 0);
         assert!(db.take_album_batch(250).unwrap().is_none());
+    }
+
+    #[test]
+    fn uploaded_assets_record_query_and_update() {
+        let db = mem();
+        db.record_uploaded("/photos/a.jpg", "asset-1", Some("album-1")).unwrap();
+        db.record_uploaded("/photos/sub/b.jpg", "asset-2", Some("album-1")).unwrap();
+        db.record_uploaded("/other/c.jpg", "asset-3", None).unwrap();
+
+        let found = db.assets_for_folder("/photos").unwrap();
+        assert_eq!(found.len(), 2);
+        assert!(found.iter().any(|a| a.asset_id == "asset-1"));
+        assert!(found.iter().any(|a| a.asset_id == "asset-2"));
+
+        // /other doesn't match /photos prefix
+        let other = db.assets_for_folder("/other").unwrap();
+        assert_eq!(other.len(), 1);
+        assert_eq!(other[0].asset_id, "asset-3");
+
+        // Update album assignment
+        db.update_uploaded_album("/photos/a.jpg", Some("album-2")).unwrap();
+        let updated = db.assets_for_folder("/photos").unwrap();
+        let a = updated.iter().find(|a| a.path == "/photos/a.jpg").unwrap();
+        assert_eq!(a.album_id.as_deref(), Some("album-2"));
+
+        // Upsert overwrites
+        db.record_uploaded("/photos/a.jpg", "asset-1-new", Some("album-3")).unwrap();
+        let upserted = db.assets_for_folder("/photos").unwrap();
+        let a = upserted.iter().find(|a| a.path == "/photos/a.jpg").unwrap();
+        assert_eq!(a.asset_id, "asset-1-new");
+        assert_eq!(a.album_id.as_deref(), Some("album-3"));
     }
 
     #[test]

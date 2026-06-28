@@ -145,6 +145,11 @@ export interface RepairReport {
   resized: number;
 }
 
+export interface ReorganizeResult {
+  added: number;
+  errors: string[];
+}
+
 export interface FolderInspect {
   file_count: number;
   total_bytes: number;

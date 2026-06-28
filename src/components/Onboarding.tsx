@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Check, ChevronRight, Circle, FolderPlus } from "lucide-react";
 import { api } from "../lib/tauri";
+import { isServerConfigured } from "../lib/config";
 import type { ConfigDto } from "../types";
 import type { Tab } from "./Sidebar";
 
@@ -14,11 +15,7 @@ export function Onboarding({
   onNavigate: (t: Tab) => void;
   onSaved: () => void;
 }) {
-  // Configured with either an API key or a logged-in password session.
-  const serverDone =
-    !!config.server_url &&
-    ((config.auth_method === "api_key" && config.has_api_key) ||
-      config.auth_method === "password");
+  const serverDone = isServerConfigured(config);
   const folderDone = config.folders.length > 0;
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [adding, setAdding] = useState<string | null>(null);

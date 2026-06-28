@@ -544,6 +544,10 @@ impl SyncEngine {
                         let db = &self.inner.db;
                         if is_duplicate {
                             log::info!("duplicate (already on server): {filename}");
+                            if let Some(aid) = &r.asset_id {
+                                let album = self.album_for_path(&item.path).await;
+                                let _ = db.record_uploaded(&item.path, aid, album.as_deref());
+                            }
                             let _ = db.add_history(
                                 &item.id,
                                 &filename,
@@ -637,7 +641,9 @@ impl SyncEngine {
                         tokio::spawn(async move { e.flush_albums().await });
                     }
                 }
+                let album = self.album_for_path(&item.path).await;
                 let db = &self.inner.db;
+                let _ = db.record_uploaded(&item.path, &resp.id, album.as_deref());
                 let _ = db.add_history(&item.id, &filename, Some(&resp.id), st, None);
                 // Mark synced so future scans skip this file entirely.
                 let _ = db.put_hash(&item.path, &fh.sha1_hex, fh.size, fh.mtime);
@@ -927,6 +933,134 @@ impl SyncEngine {
         }
     }
 
+    async fn reconcile_folder_album(
+        &self,
+        folder_path: &str,
+        old_album_id: Option<&str>,
+        new_album_id: Option<&str>,
+    ) {
+        let assets = match self.with_db(|db| db.assets_for_folder(folder_path)).await {
+            Ok(a) => a,
+            Err(e) => {
+                log::warn!("album reconciliation failed for {folder_path}: {e}");
+                return;
+            }
+        };
+        if assets.is_empty() {
+            return;
+        }
+        let client = match self.client().await {
+            Some(c) => c,
+            None => return,
+        };
+        let asset_ids: Vec<String> = assets.iter().map(|a| a.asset_id.clone()).collect();
+
+        if let Some(new_id) = new_album_id {
+            for chunk in asset_ids.chunks(ALBUM_BATCH as usize) {
+                let ids = chunk.to_vec();
+                match client.add_to_album(new_id, &ids).await {
+                    Ok(()) => log::info!(
+                        "reconciled {} asset(s) into album {new_id}",
+                        ids.len()
+                    ),
+                    Err(e) => {
+                        log::warn!("album reconciliation add failed: {e}");
+                        return;
+                    }
+                }
+            }
+        }
+        if let Some(old_id) = old_album_id {
+            for chunk in asset_ids.chunks(ALBUM_BATCH as usize) {
+                let ids = chunk.to_vec();
+                match client.remove_from_album(old_id, &ids).await {
+                    Ok(()) => log::info!(
+                        "removed {} asset(s) from album {old_id}",
+                        ids.len()
+                    ),
+                    Err(e) => {
+                        log::warn!("album reconciliation remove failed: {e}");
+                        return;
+                    }
+                }
+            }
+        }
+        let new_id_owned = new_album_id.map(|s| s.to_string());
+        let _ = self
+            .with_db(|db| {
+                for a in &assets {
+                    let _ = db.update_uploaded_album(&a.path, new_id_owned.as_deref());
+                }
+            })
+            .await;
+    }
+
+    pub async fn reorganize_albums(&self) -> crate::sync::cleanup::ReorganizeResult {
+        use crate::sync::cleanup::ReorganizeResult;
+        let config = self.inner.config.lock().await.clone();
+        let client = match self.client().await {
+            Some(c) => c,
+            None => {
+                return ReorganizeResult {
+                    errors: vec!["Not connected to a server".into()],
+                    ..Default::default()
+                }
+            }
+        };
+        let mut result = ReorganizeResult::default();
+        for folder in &config.folders {
+            let Some(target) = &folder.album_id else {
+                continue;
+            };
+            let assets = match self.with_db(|db| db.assets_for_folder(&folder.path)).await {
+                Ok(a) => a,
+                Err(e) => {
+                    result.errors.push(format!("{}: {e}", folder.path));
+                    continue;
+                }
+            };
+            let to_add: Vec<String> = assets
+                .iter()
+                .filter(|a| a.album_id.as_deref() != Some(target.as_str()))
+                .map(|a| a.asset_id.clone())
+                .collect();
+            if to_add.is_empty() {
+                continue;
+            }
+            for chunk in to_add.chunks(ALBUM_BATCH as usize) {
+                let ids = chunk.to_vec();
+                match client.add_to_album(target, &ids).await {
+                    Ok(()) => {
+                        result.added += ids.len();
+                        let target = target.clone();
+                        let paths: Vec<String> = assets
+                            .iter()
+                            .filter(|a| ids.contains(&a.asset_id))
+                            .map(|a| a.path.clone())
+                            .collect();
+                        let _ = self
+                            .with_db(|db| {
+                                for p in &paths {
+                                    let _ = db.update_uploaded_album(p, Some(&target));
+                                }
+                            })
+                            .await;
+                    }
+                    Err(e) => {
+                        result.errors.push(format!("{}: {e}", folder.path));
+                        break;
+                    }
+                }
+            }
+        }
+        log::info!(
+            "reorganize complete: {} asset(s) added, {} error(s)",
+            result.added,
+            result.errors.len()
+        );
+        result
+    }
+
     // ---- control surface (called from IPC commands) ----------------------
 
     pub async fn set_paused(&self, paused: bool) {
@@ -941,12 +1075,29 @@ impl SyncEngine {
     /// Apply a new configuration: rebuild the client, restart the watcher
     /// (only if folder/filter/server settings changed), update bandwidth, etc.
     pub async fn apply_config(&self, new_config: AppConfig) {
-        let needs_rescan = {
+        let (needs_rescan, album_changes) = {
             let old = self.inner.config.lock().await;
-            old.server_url != new_config.server_url
+            let rescan = old.server_url != new_config.server_url
                 || old.allow_insecure != new_config.allow_insecure
                 || old.folders != new_config.folders
-                || old.include_extensions != new_config.include_extensions
+                || old.include_extensions != new_config.include_extensions;
+            let changes: Vec<(String, Option<String>, Option<String>)> = new_config
+                .folders
+                .iter()
+                .filter_map(|nf| {
+                    old.folders
+                        .iter()
+                        .find(|of| of.path == nf.path)
+                        .and_then(|of| {
+                            if of.album_id != nf.album_id {
+                                Some((nf.path.clone(), of.album_id.clone(), nf.album_id.clone()))
+                            } else {
+                                None
+                            }
+                        })
+                })
+                .collect();
+            (rescan, changes)
         };
 
         self.inner
@@ -977,6 +1128,18 @@ impl SyncEngine {
             self.spawn_ingest(rx);
             self.scan_all().await;
         }
+
+        if !album_changes.is_empty() {
+            let engine = self.clone();
+            tokio::spawn(async move {
+                for (folder, old_album, new_album) in album_changes {
+                    engine
+                        .reconcile_folder_album(&folder, old_album.as_deref(), new_album.as_deref())
+                        .await;
+                }
+            });
+        }
+
         self.push_status().await;
     }
 

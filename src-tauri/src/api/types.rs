@@ -97,7 +97,7 @@ pub struct Album {
     pub asset_count: u32,
 }
 
-/// Response of `POST /auth/login`.
+/// Response of `POST /api/auth/login`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct LoginResponse {
     #[serde(rename = "accessToken")]

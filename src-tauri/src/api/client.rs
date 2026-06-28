@@ -520,6 +520,20 @@ impl ImmichClient {
             .error_for_status()?;
         Ok(())
     }
+
+    /// `DELETE /api/albums/{id}/assets` — remove assets from an album.
+    pub async fn remove_from_album(&self, album_id: &str, asset_ids: &[String]) -> Result<()> {
+        if asset_ids.is_empty() {
+            return Ok(());
+        }
+        let path = format!("/api/albums/{}/assets", encode_path_segment(album_id));
+        self.authed(self.http.delete(self.url(&path)))
+            .json(&serde_json::json!({ "ids": asset_ids }))
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(())
+    }
 }
 
 /// Encode raw SHA1 bytes as Base64 (for bulk-upload-check).
