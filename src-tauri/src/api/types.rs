@@ -178,6 +178,106 @@ pub struct MetadataSearchResponse {
     pub assets: SearchAssetPage,
 }
 
+/// `POST /api/search/metadata` request body, serialized with Immich's camelCase
+/// keys (and `type` for the media type). Doubles as the Tauri command arg for
+/// `browse_search`, so the frontend can pass the full filter set directly.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MetadataSearch {
+    pub page: u32,
+    pub size: u32,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub query: Option<String>,
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none", default)]
+    pub asset_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub is_favorite: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub is_archived: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub is_trashed: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub is_not_in_album: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub taken_after: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub taken_before: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub make: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub model: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub person_ids: Vec<String>,
+}
+
+/// EXIF block of `GET /api/assets/{id}`, trimmed to fields shown in the info
+/// panel. All optional — servers/asset types vary.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExifInfo {
+    #[serde(default)]
+    pub make: Option<String>,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub lens_model: Option<String>,
+    #[serde(default)]
+    pub f_number: Option<f64>,
+    #[serde(default)]
+    pub focal_length: Option<f64>,
+    #[serde(default)]
+    pub iso: Option<i64>,
+    #[serde(default)]
+    pub exposure_time: Option<String>,
+    #[serde(default)]
+    pub date_time_original: Option<String>,
+    #[serde(default)]
+    pub latitude: Option<f64>,
+    #[serde(default)]
+    pub longitude: Option<f64>,
+    #[serde(default)]
+    pub city: Option<String>,
+    #[serde(default)]
+    pub state: Option<String>,
+    #[serde(default)]
+    pub country: Option<String>,
+    #[serde(default)]
+    pub file_size_bytes: Option<i64>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub orientation: Option<String>,
+    #[serde(default)]
+    pub resolution_x: Option<f64>,
+    #[serde(default)]
+    pub resolution_y: Option<f64>,
+}
+
+/// `GET /api/assets/{id}` — full asset detail for the info panel.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssetDetail {
+    pub id: String,
+    #[serde(rename = "type", default)]
+    pub asset_type: String,
+    #[serde(default)]
+    pub original_file_name: Option<String>,
+    #[serde(default)]
+    pub original_mime_type: Option<String>,
+    #[serde(default)]
+    pub original_path: Option<String>,
+    #[serde(default)]
+    pub file_created_at: Option<String>,
+    #[serde(default)]
+    pub updated_at: Option<String>,
+    #[serde(default)]
+    pub exif_info: Option<ExifInfo>,
+    #[serde(default)]
+    pub is_favorite: bool,
+    #[serde(default)]
+    pub live_photo_video_id: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

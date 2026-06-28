@@ -1,12 +1,32 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/tauri";
-import type { BrowseAsset } from "../types";
+import type { BrowseAsset, BrowsePage } from "../types";
 
 const PAGE_SIZE = 60;
 
-export type BrowseFilter = "all" | "IMAGE" | "VIDEO";
+export interface BrowseFilters {
+  query: string;
+  type: "all" | "IMAGE" | "VIDEO";
+  isFavorite: boolean;
+  isArchived: boolean;
+  isNotInAlbum: boolean;
+  takenAfter: string; // YYYY-MM-DD or ""
+  takenBefore: string; // YYYY-MM-DD or ""
+}
 
-export function useBrowse(filter: BrowseFilter) {
+export const DEFAULT_FILTERS: BrowseFilters = {
+  query: "",
+  type: "all",
+  isFavorite: false,
+  isArchived: false,
+  isNotInAlbum: false,
+  takenAfter: "",
+  takenBefore: "",
+};
+
+export type BrowseMode = "metadata" | "smart";
+
+export function useBrowse(filters: BrowseFilters, mode: BrowseMode) {
   const [items, setItems] = useState<BrowseAsset[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -14,47 +34,81 @@ export function useBrowse(filter: BrowseFilter) {
   const pageRef = useRef(1);
   const loadingRef = useRef(false);
 
-  const fetchPage = useCallback(async (page: number, f: BrowseFilter) => {
-    loadingRef.current = true;
-    setLoading(true);
-    try {
-      return await api.browseAssets(page, PAGE_SIZE, f === "all" ? undefined : f);
-    } finally {
-      loadingRef.current = false;
-      setLoading(false);
-    }
-  }, []);
+  const fetchPage = useCallback(
+    async (page: number): Promise<BrowsePage> => {
+      if (mode === "smart") {
+        return api.browseSmart(filters.query.trim(), page, PAGE_SIZE);
+      }
+      return api.browseSearch({
+        page,
+        size: PAGE_SIZE,
+        query: filters.query.trim() || undefined,
+        type: filters.type === "all" ? undefined : filters.type,
+        isFavorite: filters.isFavorite || undefined,
+        isArchived: filters.isArchived || undefined,
+        isNotInAlbum: filters.isNotInAlbum || undefined,
+        takenAfter: filters.takenAfter || undefined,
+        takenBefore: filters.takenBefore || undefined,
+      });
+    },
+    [filters, mode],
+  );
 
-  // (Re)load from page 1 whenever the filter changes.
+  // (Re)load from page 1 when the filters or mode change. Debounced so typing
+  // into the search box doesn't fire a request per keystroke; a filter/mode
+  // change cancels any in-flight delayed request via `cancelled`.
   useEffect(() => {
     let cancelled = false;
-    setError(null);
-    pageRef.current = 1;
-    (async () => {
-      try {
-        const result = await fetchPage(1, filter);
-        if (cancelled) return;
-        setItems(result.items);
-        setHasMore(result.items.length >= PAGE_SIZE && result.nextPage !== null);
-        pageRef.current = 2;
-      } catch (e) {
-        if (!cancelled) {
-          setError(String(e));
-          setItems([]);
-          setHasMore(false);
-        }
+    const t = setTimeout(() => {
+      if (cancelled) return;
+      setError(null);
+      pageRef.current = 1;
+      setHasMore(true);
+      // Smart search needs a query — clear the grid until there is one.
+      if (mode === "smart" && !filters.query.trim()) {
+        setItems([]);
+        setHasMore(false);
+        setLoading(false);
+        return;
       }
-    })();
+      setLoading(true);
+      loadingRef.current = true;
+      (async () => {
+        try {
+          const result = await fetchPage(1);
+          if (cancelled) return;
+          setItems(result.items);
+          setHasMore(
+            result.items.length >= PAGE_SIZE && result.nextPage !== null,
+          );
+          pageRef.current = 2;
+        } catch (e) {
+          if (!cancelled) {
+            setError(String(e));
+            setItems([]);
+            setHasMore(false);
+          }
+        } finally {
+          if (!cancelled) {
+            setLoading(false);
+            loadingRef.current = false;
+          }
+        }
+      })();
+    }, 250);
     return () => {
       cancelled = true;
+      clearTimeout(t);
     };
-  }, [filter, fetchPage]);
+  }, [fetchPage, filters, mode]);
 
   const loadMore = useCallback(async () => {
     if (loadingRef.current || !hasMore) return;
     const page = pageRef.current;
+    loadingRef.current = true;
+    setLoading(true);
     try {
-      const result = await fetchPage(page, filter);
+      const result = await fetchPage(page);
       setItems((prev) => [...prev, ...result.items]);
       if (result.items.length < PAGE_SIZE || result.nextPage === null) {
         setHasMore(false);
@@ -64,8 +118,11 @@ export function useBrowse(filter: BrowseFilter) {
     } catch (e) {
       setError(String(e));
       setHasMore(false);
+    } finally {
+      setLoading(false);
+      loadingRef.current = false;
     }
-  }, [filter, hasMore, fetchPage]);
+  }, [fetchPage, hasMore]);
 
   return { items, loading, error, hasMore, loadMore };
 }

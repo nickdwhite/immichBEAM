@@ -538,25 +538,56 @@ impl ImmichClient {
     /// `POST /api/search/metadata` — one page of the asset timeline/grid.
     /// `asset_type` filters to `"IMAGE"` or `"VIDEO"` (None = both). `size` is
     /// clamped to the server max of 250.
+    /// `POST /api/search/metadata` — one page of the asset timeline/grid, with
+    /// the full filter set (text query, type, favorite/archive/trash/not-in-
+    /// album, date range, camera make/model, people). `size` is clamped to the
+    /// server max of 250 and EXIF is omitted (not needed for the grid listing).
     pub async fn search_assets(
         &self,
-        page: u32,
-        size: u32,
-        asset_type: Option<&str>,
+        search: &MetadataSearch,
     ) -> Result<MetadataSearchResponse> {
-        let mut body = serde_json::json!({
-            "page": page,
-            "size": size.min(250),
-            "withExif": false,
-            "isArchived": false,
-            "isTrashed": false,
-        });
-        if let Some(t) = asset_type {
-            body["type"] = serde_json::Value::String(t.to_string());
+        let mut body = serde_json::to_value(search)?;
+        if let Some(obj) = body.as_object_mut() {
+            obj.insert("size".into(), serde_json::json!(search.size.min(250)));
+            obj.insert("withExif".into(), false.into());
         }
         let resp = self
             .authed(self.http.post(self.url("/api/search/metadata")))
             .json(&body)
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(resp.json().await?)
+    }
+
+    /// `POST /api/search/smart` — CLIP semantic search (needs machine-learning
+    /// enabled on the server). Returns the same shape as metadata search.
+    pub async fn smart_search(
+        &self,
+        query: &str,
+        page: u32,
+        size: u32,
+    ) -> Result<MetadataSearchResponse> {
+        let body = serde_json::json!({
+            "query": query,
+            "page": page,
+            "size": size.min(250),
+            "withExif": false,
+        });
+        let resp = self
+            .authed(self.http.post(self.url("/api/search/smart")))
+            .json(&body)
+            .send()
+            .await?
+            .error_for_status()?;
+        Ok(resp.json().await?)
+    }
+
+    /// `GET /api/assets/{id}` — full asset detail (incl. EXIF) for the info panel.
+    pub async fn asset_detail(&self, asset_id: &str) -> Result<AssetDetail> {
+        let path = format!("/api/assets/{}", encode_path_segment(asset_id));
+        let resp = self
+            .authed(self.http.get(self.url(&path)))
             .send()
             .await?
             .error_for_status()?;

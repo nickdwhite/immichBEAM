@@ -327,6 +327,18 @@ impl Db {
         Ok(())
     }
 
+    /// Local path of an asset that was uploaded from this machine, if any — used
+    /// by the browser info panel. Looks up by server asset id.
+    pub fn local_path_for_asset(&self, asset_id: &str) -> Result<Option<String>> {
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare("SELECT path FROM uploaded_assets WHERE asset_id = ?1 LIMIT 1")?;
+        match stmt.query_row(params![asset_id], |row| row.get::<_, String>(0)) {
+            Ok(path) => Ok(Some(path)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
     // ---- hash cache ------------------------------------------------------
 
     /// Return the cached SHA1 if `path` is unchanged (same size + mtime).

@@ -204,3 +204,55 @@ export interface BrowsePage {
   items: BrowseAsset[];
   nextPage: string | null;
 }
+
+// Sent to browse_search / browse_smart. Field names match the Rust MetadataSearch
+// serde shape (rename_all = "camelCase", asset_type -> "type").
+export interface MetadataSearch {
+  page: number;
+  size: number;
+  query?: string;
+  type?: "IMAGE" | "VIDEO" | "AUDIO" | "OTHER";
+  isFavorite?: boolean;
+  isArchived?: boolean;
+  isTrashed?: boolean;
+  isNotInAlbum?: boolean;
+  takenAfter?: string;
+  takenBefore?: string;
+  make?: string;
+  model?: string;
+  personIds?: string[];
+}
+
+export interface ExifInfo {
+  make?: string | null;
+  model?: string | null;
+  lensModel?: string | null;
+  fNumber?: number | null;
+  focalLength?: number | null;
+  iso?: number | null;
+  exposureTime?: string | null;
+  dateTimeOriginal?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  fileSizeBytes?: number | null;
+  description?: string | null;
+  orientation?: string | null;
+  resolutionX?: number | null;
+  resolutionY?: number | null;
+}
+
+export interface AssetDetail {
+  id: string;
+  type: string;
+  originalFileName?: string | null;
+  originalMimeType?: string | null;
+  originalPath?: string | null;
+  fileCreatedAt?: string | null;
+  updatedAt?: string | null;
+  exifInfo?: ExifInfo | null;
+  isFavorite?: boolean;
+  livePhotoVideoId?: string | null;
+}

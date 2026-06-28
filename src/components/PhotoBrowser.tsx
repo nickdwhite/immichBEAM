@@ -54,9 +54,13 @@ export function PhotoBrowser({ config }: { config: ConfigDto }) {
       )}
 
       {openedAlbum ? (
-        <AlbumView album={openedAlbum} onBack={() => setOpenedAlbum(null)} />
+        <AlbumView
+          album={openedAlbum}
+          serverUrl={config.server_url}
+          onBack={() => setOpenedAlbum(null)}
+        />
       ) : mode === "timeline" ? (
-        <TimelineGrid />
+        <TimelineGrid serverUrl={config.server_url} />
       ) : (
         <AlbumList onOpen={setOpenedAlbum} />
       )}

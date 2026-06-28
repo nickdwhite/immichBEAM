@@ -5,9 +5,11 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   Album,
   AppConfig,
+  AssetDetail,
   BrowseAsset,
   BrowsePage,
   ConfigDto,
+  MetadataSearch,
   ConnectionInfo,
   FolderInspect,
   FreeableScan,
@@ -117,6 +119,14 @@ export const api = {
       size,
       assetType: assetType ?? null,
     }),
+  browseSearch: (search: MetadataSearch) =>
+    invoke<BrowsePage>("browse_search", { search }),
+  browseSmart: (query: string, page: number, size: number) =>
+    invoke<BrowsePage>("browse_smart", { query, page, size }),
+  getAssetDetail: (assetId: string) =>
+    invoke<AssetDetail>("get_asset_detail", { assetId }),
+  getLocalPath: (assetId: string) =>
+    invoke<string | null>("get_local_path", { assetId }),
   browseAlbumAssets: (albumId: string) =>
     invoke<BrowseAsset[]>("browse_album_assets", { albumId }),
   downloadAsset: (assetId: string, destination: string) =>

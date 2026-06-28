@@ -3,7 +3,9 @@
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
-use crate::api::{Album, BrowseAsset, ConnectionInfo, ImmichClient, ServerFeatures};
+use crate::api::{
+    Album, AssetDetail, BrowseAsset, ConnectionInfo, ImmichClient, MetadataSearch, ServerFeatures,
+};
 use crate::config::{AppConfig, WatchedFolder};
 use crate::db::{HistoryItem, QueueItem};
 use crate::keychain;
@@ -477,14 +479,75 @@ pub async fn browse_assets(
     asset_type: Option<String>,
 ) -> CmdResult<BrowsePage> {
     let client = engine.client().await.ok_or("Not connected to a server")?;
+    let search = MetadataSearch {
+        page,
+        size,
+        asset_type,
+        ..Default::default()
+    };
     let resp = client
-        .search_assets(page, size, asset_type.as_deref())
+        .search_assets(&search)
         .await
         .map_err(map_err)?;
     Ok(BrowsePage {
         items: resp.assets.items,
         next_page: resp.assets.next_page,
     })
+}
+
+/// `POST /api/search/metadata` with the full filter set (text query, type,
+/// favorite/archive/trash/not-in-album, date range, camera, people).
+#[tauri::command]
+pub async fn browse_search(
+    engine: State<'_, SyncEngine>,
+    search: MetadataSearch,
+) -> CmdResult<BrowsePage> {
+    let client = engine.client().await.ok_or("Not connected to a server")?;
+    let resp = client.search_assets(&search).await.map_err(map_err)?;
+    Ok(BrowsePage {
+        items: resp.assets.items,
+        next_page: resp.assets.next_page,
+    })
+}
+
+/// `POST /api/search/smart` — CLIP semantic search (needs ML on the server).
+#[tauri::command]
+pub async fn browse_smart(
+    engine: State<'_, SyncEngine>,
+    query: String,
+    page: u32,
+    size: u32,
+) -> CmdResult<BrowsePage> {
+    let client = engine.client().await.ok_or("Not connected to a server")?;
+    let resp = client
+        .smart_search(&query, page, size)
+        .await
+        .map_err(map_err)?;
+    Ok(BrowsePage {
+        items: resp.assets.items,
+        next_page: resp.assets.next_page,
+    })
+}
+
+/// `GET /api/assets/{id}` — full asset detail (incl. EXIF) for the info panel.
+#[tauri::command]
+pub async fn get_asset_detail(
+    engine: State<'_, SyncEngine>,
+    asset_id: String,
+) -> CmdResult<AssetDetail> {
+    let client = engine.client().await.ok_or("Not connected to a server")?;
+    client.asset_detail(&asset_id).await.map_err(map_err)
+}
+
+/// Local path of an asset uploaded from this machine, if any (info panel).
+#[tauri::command]
+pub async fn get_local_path(
+    engine: State<'_, SyncEngine>,
+    asset_id: String,
+) -> CmdResult<Option<String>> {
+    Ok(engine
+        .with_db(|db| db.local_path_for_asset(&asset_id).unwrap_or(None))
+        .await)
 }
 
 /// `GET /api/albums/{id}` — assets in a specific album.
