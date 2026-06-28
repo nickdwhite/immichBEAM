@@ -31,6 +31,17 @@ export function FolderSettings({
 
   const isConfigured = isServerConfigured(config);
 
+  const deviceName = (() => {
+    const id = config.device_id;
+    const prefix = "beam-";
+    const uuidLen = 36;
+    let host = id;
+    if (id.startsWith(prefix) && id.length > prefix.length + uuidLen + 1) {
+      host = id.slice(prefix.length, -(uuidLen + 1));
+    }
+    return (host.split(".")[0] || host) || "Unknown Device";
+  })();
+
   // Lazily compute per-folder media count + size in the background.
   useEffect(() => {
     let active = true;
@@ -234,9 +245,9 @@ export function FolderSettings({
         <p className="mt-1 text-xs text-slate-400">
           {config.album_mode === "off" && "Use per-folder album dropdowns only."}
           {config.album_mode === "device" &&
-            "All uploads go to one album named after this computer."}
+            `All uploads go to an album named "${deviceName}". Per-folder overrides still apply.`}
           {config.album_mode === "folder" &&
-            "Each folder creates an album named after its folder."}
+            "Each folder creates an album named after its basename. Per-folder overrides still apply."}
         </p>
       </div>
 
@@ -339,9 +350,21 @@ export function FolderSettings({
                   onChange={(e) => setAlbum(f.path, e.target.value)}
                   disabled={busy || albums.length === 0}
                   className="max-w-[12rem] rounded-md border-slate-300 text-xs dark:border-slate-700 dark:bg-slate-800"
-                  title={albums.length === 0 ? "Configure the server to load albums" : "Target album"}
+                  title={
+                    albums.length === 0
+                      ? "Configure the server to load albums"
+                      : config.album_mode !== "off" && !f.album_id
+                        ? `Auto: ${config.album_mode === "device" ? deviceName : f.path.split("/").pop() ?? "Uploads"}`
+                        : "Target album (overrides auto mode)"
+                  }
                 >
-                  <option value="">No album</option>
+                  <option value="">
+                    {config.album_mode === "off"
+                      ? "No album"
+                      : config.album_mode === "device"
+                        ? `Auto: ${deviceName}`
+                        : `Auto: ${f.path.split("/").pop() ?? "Uploads"}`}
+                  </option>
                   {albums.map((a) => (
                     <option key={a.id} value={a.id}>
                       {a.album_name}

@@ -113,6 +113,14 @@ pub struct AppConfig {
     /// Cached album id for `AlbumMode::Device`.
     #[serde(default)]
     pub device_album_id: Option<String>,
+
+    /// Delete rotated log files older than this many days (0 = keep forever).
+    #[serde(default = "default_log_retention_days")]
+    pub log_retention_days: u32,
+}
+
+fn default_log_retention_days() -> u32 {
+    30
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -181,6 +189,7 @@ impl Default for AppConfig {
             auth_method: AuthMethodConfig::default(),
             album_mode: AlbumMode::default(),
             device_album_id: None,
+            log_retention_days: default_log_retention_days(),
         }
     }
 }

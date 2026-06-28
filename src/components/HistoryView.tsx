@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { RotateCcw, Trash2 } from "lucide-react";
+import { ExternalLink, FolderOpen, RotateCcw, Trash2 } from "lucide-react";
+import { openUrl, revealItemInDir } from "@tauri-apps/plugin-opener";
 import clsx from "clsx";
 import { api, onHistoryChanged } from "../lib/tauri";
 import { useFailed } from "../hooks/useQueue";
@@ -20,7 +21,7 @@ function fmt(ts: number): string {
   return new Date(ts * 1000).toLocaleString();
 }
 
-export function HistoryView() {
+export function HistoryView({ serverUrl }: { serverUrl: string }) {
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
   const [search, setSearch] = useState("");
@@ -146,8 +147,28 @@ export function HistoryView() {
               {shown.map((h) => (
                 <tr key={h.id} className="bg-white dark:bg-slate-900">
                   <td className="max-w-xs px-3 py-2">
-                    <div className="truncate" title={h.filename}>
-                      {h.filename}
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate" title={h.id}>
+                        {h.filename}
+                      </span>
+                      <button
+                        onClick={() => revealItemInDir(h.id).catch(() => {})}
+                        title={`Reveal in file manager\n${h.id}`}
+                        className="shrink-0 text-slate-300 hover:text-slate-600 dark:text-slate-600 dark:hover:text-slate-300"
+                      >
+                        <FolderOpen size={13} />
+                      </button>
+                      {h.asset_id && serverUrl && (
+                        <button
+                          onClick={() =>
+                            openUrl(`${serverUrl}/photos/${h.asset_id}`).catch(() => {})
+                          }
+                          title="View on Immich server"
+                          className="shrink-0 text-slate-300 hover:text-brand-600 dark:text-slate-600 dark:hover:text-brand-400"
+                        >
+                          <ExternalLink size={13} />
+                        </button>
+                      )}
                     </div>
                     {h.reason && (
                       <div

@@ -467,7 +467,7 @@ impl SyncEngine {
         if !path.exists() {
             let db = &self.inner.db;
             let _ = db.add_history(
-                &item.id,
+                &item.path,
                 &filename,
                 None,
                 status::SKIPPED,
@@ -552,7 +552,7 @@ impl SyncEngine {
                                 let _ = db.record_uploaded(&item.path, aid, album.as_deref());
                             }
                             let _ = db.add_history(
-                                &item.id,
+                                &item.path,
                                 &filename,
                                 r.asset_id.as_deref(),
                                 status::DUPLICATE,
@@ -565,7 +565,7 @@ impl SyncEngine {
                             log::warn!("server rejected {filename}: {reason}");
                             let unsupported_reason = format!("Server rejected: {reason}");
                             let _ = db.add_history(
-                                &item.id,
+                                &item.path,
                                 &filename,
                                 None,
                                 status::UNSUPPORTED,
@@ -647,7 +647,7 @@ impl SyncEngine {
                 let album = self.album_for_path(&item.path).await;
                 let db = &self.inner.db;
                 let _ = db.record_uploaded(&item.path, &resp.id, album.as_deref());
-                let _ = db.add_history(&item.id, &filename, Some(&resp.id), st, None);
+                let _ = db.add_history(&item.path, &filename, Some(&resp.id), st, None);
                 // Mark synced so future scans skip this file entirely.
                 let _ = db.put_hash(&item.path, &fh.sha1_hex, fh.size, fh.mtime);
                 let _ = db.remove_queue_item(&item.id);
@@ -721,7 +721,7 @@ impl SyncEngine {
                     .to_string();
                 self.with_db(|db| {
                     let _ = db.add_history(
-                        &item.id,
+                        &item.path,
                         &filename,
                         None,
                         status::SKIPPED,
@@ -829,7 +829,7 @@ impl SyncEngine {
         let retries = db.mark_failed(&item.id, msg).unwrap_or(MAX_RETRIES);
         if retries >= MAX_RETRIES {
             let _ = db.mark_dead(&item.id, msg);
-            let _ = db.add_history(&item.id, filename, None, status::FAILED, Some(msg));
+            let _ = db.add_history(&item.path, filename, None, status::FAILED, Some(msg));
             self.inner.failed_session.fetch_add(1, Ordering::Relaxed);
             self.notify_failure(filename);
         }
@@ -909,6 +909,7 @@ impl SyncEngine {
                 let name = hostname::get()
                     .ok()
                     .and_then(|h| h.into_string().ok())
+                    .map(|h| h.split('.').next().unwrap_or(&h).to_string())
                     .unwrap_or_else(|| "Unknown Device".into());
                 drop(cfg);
                 self.resolve_album_by_name(&name).await

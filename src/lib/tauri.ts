@@ -13,6 +13,7 @@ import type {
   HistoryItem,
   HistoryStats,
   ProgressPayload,
+  PurgeResult,
   QueueItem,
   ReorganizeResult,
   RepairReport,
@@ -98,6 +99,10 @@ export const api = {
 
   getLogPath: () => invoke<string>("get_log_path"),
   readLog: (lines = 500) => invoke<string>("read_log", { lines }),
+  exportLog: (destination: string, content: string) =>
+    invoke<void>("export_log", { destination, content }),
+  purgeOldLogs: (maxAgeDays: number) =>
+    invoke<PurgeResult>("purge_old_logs", { maxAgeDays }),
 
   checkForUpdate: () => invoke<UpdateInfo>("check_for_update"),
   installUpdate: () => invoke<void>("install_update"),

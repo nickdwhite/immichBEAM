@@ -4,6 +4,42 @@ All notable changes to Immich Beam are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.7] - 2026-06-28
+
+### Added
+
+- **Log viewer rewrite** — structured log parsing with level filtering (Error /
+  Warn / Info / Debug), category toggle chips (Sync, Watcher, API, Queue, Hash,
+  Cleanup, Config, DB), text search, and colorized output. Multi-line log entries
+  are properly grouped. Reads 2000 lines (up from 500).
+- **Log export** — save filtered log output to a file via native save dialog.
+- **Log retention settings** — configurable `log_retention_days` (default 30,
+  0 = keep forever) under Sync Settings → Diagnostics, with a "Purge now" button
+  that deletes rotated log files older than the retention period.
+- **History file links** — hovering a filename in History shows the full file
+  path. A folder icon reveals the file in Finder; a link icon opens the asset on
+  the Immich server (when an asset ID is available).
+- **Album dropdown context** — when album mode is Device or Folder, per-folder
+  dropdowns show the auto-assigned album name (e.g. "Auto: EIQMBP16") instead of
+  "No album". Selecting a specific album overrides auto mode for that folder.
+- **Device name display** — the Album Organization description now shows the
+  actual device name when Device mode is selected.
+- Section dividers and tooltips across all settings pages, toolbar buttons, and
+  sidebar section headers.
+- Expanded About page with GitHub repository link and organized sections.
+- TODO items for multi-server support, diagnostics/logging improvements, and
+  backup/restore.
+
+### Fixed
+
+- **History IDs stored file path instead of UUID** — history entries for
+  successful, duplicate, unsupported, failed, and skipped uploads now store the
+  full file path as the ID, enabling the "reveal in Finder" and tooltip features.
+- **Device album name** — stripped domain suffix from hostname (e.g.
+  `host.local` → `host`) for cleaner album names on the Immich server.
+- Sidebar still said "Immich Dock" in one place — fixed to "Immich Beam".
+- Server URL placeholder changed from a specific IP to `http://your-server:2283`.
+
 ## [0.3.6] - 2026-06-28
 
 ### Added
@@ -100,6 +136,7 @@ limits and streaming progress, per-folder albums, "Free Up Space", a grouped
 dashboard, OS-keychain API-key storage, in-app auto-update wiring, and CI +
 release workflows for macOS / Windows / Linux.
 
+[0.3.7]: https://github.com/nickdwhite/immich-beam/releases/tag/v0.3.7
 [0.3.6]: https://github.com/nickdwhite/immich-beam/releases/tag/v0.3.6
 [0.3.1]: https://github.com/nickdwhite/immich-beam/releases/tag/v0.3.1
 [0.1.0]: https://github.com/nickdwhite/immich-beam/releases/tag/v0.1.0

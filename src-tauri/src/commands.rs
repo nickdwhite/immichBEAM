@@ -474,3 +474,42 @@ pub async fn suggest_folders(engine: State<'_, SyncEngine>) -> CmdResult<Vec<Str
     suggestions.dedup();
     Ok(suggestions)
 }
+
+#[tauri::command]
+pub fn export_log(destination: String, content: String) -> CmdResult<()> {
+    std::fs::write(&destination, content)
+        .map_err(|e| format!("failed to write log: {e}"))
+}
+
+#[derive(Serialize)]
+pub struct PurgeResult {
+    pub deleted: usize,
+    pub freed_bytes: u64,
+}
+
+#[tauri::command]
+pub fn purge_old_logs(app: AppHandle, max_age_days: u32) -> CmdResult<PurgeResult> {
+    let log_dir = app.path().app_log_dir().map_err(map_err)?;
+    let cutoff = std::time::SystemTime::now()
+        - std::time::Duration::from_secs(u64::from(max_age_days) * 86400);
+    let mut deleted = 0usize;
+    let mut freed = 0u64;
+    let entries = std::fs::read_dir(&log_dir).map_err(map_err)?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = path.file_name().unwrap_or_default().to_string_lossy();
+        if !name.starts_with("immich-beam.log") || name == "immich-beam.log" {
+            continue;
+        }
+        if let Ok(meta) = entry.metadata() {
+            let modified = meta.modified().unwrap_or(std::time::SystemTime::now());
+            if modified < cutoff {
+                freed += meta.len();
+                if std::fs::remove_file(&path).is_ok() {
+                    deleted += 1;
+                }
+            }
+        }
+    }
+    Ok(PurgeResult { deleted, freed_bytes: freed })
+}

@@ -34,6 +34,7 @@ export interface AppConfig {
   auth_method: AuthMethodConfig;
   album_mode: AlbumMode;
   device_album_id: string | null;
+  log_retention_days: number;
 }
 
 export interface ConfigDto extends AppConfig {
@@ -157,6 +158,11 @@ export interface ReorganizeResult {
 export interface FolderInspect {
   file_count: number;
   total_bytes: number;
+}
+
+export interface PurgeResult {
+  deleted: number;
+  freed_bytes: number;
 }
 
 export interface UpdateInfo {

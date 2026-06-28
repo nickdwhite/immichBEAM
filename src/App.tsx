@@ -173,7 +173,7 @@ function App() {
             <Overview config={config} status={status} onNavigate={setTab} onSaved={reload} />
           )}
           {tab === "queue" && <QueueView status={status} />}
-          {tab === "history" && <HistoryView />}
+          {tab === "history" && <HistoryView serverUrl={config.server_url} />}
           {tab === "cleanup" && <FreeUpSpace />}
           {tab === "server" && <ServerSettings config={config} onSaved={reload} />}
           {tab === "folders" && <FolderSettings config={config} onSaved={reload} />}

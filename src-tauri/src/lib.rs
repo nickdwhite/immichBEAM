@@ -147,6 +147,8 @@ pub fn run() {
             commands::create_album,
             commands::reorganize_albums,
             commands::suggest_folders,
+            commands::export_log,
+            commands::purge_old_logs,
             commands::start_freeable_scan,
             commands::get_freeable_state,
             commands::free_space,

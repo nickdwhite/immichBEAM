@@ -2179,7 +2179,7 @@ dependencies = [
 
 [[package]]
 name = "immich-beam"
-version = "0.3.6"
+version = "0.3.7"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
