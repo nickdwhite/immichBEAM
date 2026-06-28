@@ -4,6 +4,29 @@ All notable changes to Immich Beam are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.8] - 2026-06-28
+
+### Added
+
+- **Configurable watcher settings** — new Advanced section in Sync Settings for
+  poll interval (NFS/SMB fallback), health probe interval, debounce window,
+  max upload retries, and follow-symlinks toggle.
+- **Bandwidth picker redesign** — slider stepping through common presets
+  (Unlimited → 100 MB/s) with a clickable value label that opens an inline
+  editor with KB/s ↔ MB/s unit selector for custom limits.
+- **File size in History** — each history row shows the file size as a compact
+  badge; hovering the filename includes the size in the tooltip. Backed by a new
+  `size` column in `upload_history`, backfilled from cached file hashes.
+- **Database rename** — `dock.db` (legacy "Immich Dock" branding) is
+  automatically migrated to `immich-beam.db` on first launch, including WAL/SHM
+  sidecar files.
+
+### Fixed
+
+- **History migration** — existing history rows keyed by UUID are re-keyed to
+  file paths using `uploaded_assets` and `file_hashes` tables, with fallback
+  matching by filename.
+
 ## [0.3.7] - 2026-06-28
 
 ### Added
