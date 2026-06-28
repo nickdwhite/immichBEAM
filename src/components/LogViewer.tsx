@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { ClipboardCopy, FolderOpen, RefreshCw, Search, X } from "lucide-react";
+import { save } from "@tauri-apps/plugin-dialog";
+import { ClipboardCopy, Download, FolderOpen, RefreshCw, Search, X } from "lucide-react";
 import { api } from "../lib/tauri";
 import { useToast } from "./Toast";
 
@@ -170,6 +171,21 @@ export function LogViewer() {
     }
   };
 
+  const exportLog = async () => {
+    const text = filtered.map((p) => p.raw).join("\n");
+    const dest = await save({
+      defaultPath: "immich-beam.log",
+      filters: [{ name: "Log files", extensions: ["log", "txt"] }],
+    });
+    if (!dest) return;
+    try {
+      await api.exportLog(dest, text);
+      toast.success(`Exported ${filtered.length} lines to file`);
+    } catch (e) {
+      toast.error(`Export failed: ${e}`);
+    }
+  };
+
   const toggleCategory = (cat: string) => {
     setHiddenCategories((prev) => {
       const next = new Set(prev);
@@ -241,6 +257,13 @@ export function LogViewer() {
           className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
         >
           <ClipboardCopy size={13} />
+        </button>
+        <button
+          onClick={exportLog}
+          title="Save filtered log to a file"
+          className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+        >
+          <Download size={13} />
         </button>
         <button
           onClick={openFolder}

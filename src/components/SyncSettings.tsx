@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { disable, enable } from "@tauri-apps/plugin-autostart";
-import { Loader2, Save } from "lucide-react";
+import { Loader2, Save, Trash2 } from "lucide-react";
 import { api } from "../lib/tauri";
 import { useToast } from "./Toast";
 import type { ConfigDto, ConflictPolicy } from "../types";
@@ -18,6 +18,8 @@ export function SyncSettings({
   const [debug, setDebug] = useState(config.debug_logging);
   const [notifications, setNotifications] = useState(config.notifications_enabled);
   const [conflictPolicy, setConflictPolicy] = useState<ConflictPolicy>(config.conflict_policy);
+  const [logRetention, setLogRetention] = useState(config.log_retention_days);
+  const [purging, setPurging] = useState(false);
   const [saving, setSaving] = useState(false);
   const toast = useToast();
 
@@ -39,6 +41,7 @@ export function SyncSettings({
         debug_logging: debug,
         notifications_enabled: notifications,
         conflict_policy: conflictPolicy,
+        log_retention_days: logRetention,
       });
       onSaved();
       toast.success("Sync settings saved");
@@ -150,6 +153,48 @@ export function SyncSettings({
           Logs each file's hash, duplicate-check, and upload step. Useful when
           diagnosing sync problems; save to apply.
         </p>
+
+        <div className="mt-4">
+          <label className="mb-1 block text-sm font-medium" title="Automatically delete rotated log files older than this many days — 0 keeps logs forever">
+            Log retention (days)
+          </label>
+          <div className="flex items-center gap-3">
+            <input
+              type="number"
+              min={0}
+              value={logRetention}
+              onChange={(e) => setLogRetention(Math.max(0, Number(e.target.value)))}
+              className="w-24 rounded-lg border-slate-300 text-sm dark:border-slate-700 dark:bg-slate-800"
+            />
+            <button
+              onClick={async () => {
+                setPurging(true);
+                try {
+                  const r = await api.purgeOldLogs(logRetention);
+                  if (r.deleted === 0) {
+                    toast.success("No old log files to remove");
+                  } else {
+                    const mb = (r.freed_bytes / 1_048_576).toFixed(1);
+                    toast.success(`Purged ${r.deleted} log file${r.deleted === 1 ? "" : "s"} (${mb} MB freed)`);
+                  }
+                } catch (e) {
+                  toast.error(`Purge failed: ${e}`);
+                } finally {
+                  setPurging(false);
+                }
+              }}
+              disabled={purging || logRetention === 0}
+              title="Delete rotated log files older than the retention period"
+              className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-2.5 py-1.5 text-xs hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
+            >
+              {purging ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
+              Purge now
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-slate-400">
+            0 = keep forever. Only rotated files are purged; the active log is never deleted.
+          </p>
+        </div>
       </div>
 
       <div className="border-t border-slate-200 pt-5 dark:border-slate-800">
