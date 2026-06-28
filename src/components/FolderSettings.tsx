@@ -27,6 +27,13 @@ export function FolderSettings({
   const [stats, setStats] = useState<Record<string, FolderInspect>>({});
   const toast = useToast();
 
+  // The server is usable with either an API key OR a logged-in password
+  // session. Albums only load once this is true.
+  const isConfigured =
+    !!config.server_url &&
+    ((config.auth_method === "api_key" && config.has_api_key) ||
+      config.auth_method === "password");
+
   // Lazily compute per-folder media count + size in the background.
   useEffect(() => {
     let active = true;
@@ -42,12 +49,14 @@ export function FolderSettings({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config.folders.map((f) => f.path).join("|")]);
 
-  // Albums are only available once the server is configured.
+  // Albums are only available once the server is configured (API key or a
+  // logged-in password session).
   useEffect(() => {
-    if (config.has_api_key && config.server_url) {
+    if (isConfigured) {
       api.getAlbums().then(setAlbums).catch(() => setAlbums([]));
     }
-  }, [config.has_api_key, config.server_url]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConfigured]);
 
   const doAdd = async (path: string) => {
     setBusy(true);
@@ -320,13 +329,13 @@ export function FolderSettings({
             onChange={(e) => setNewAlbum(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && createAlbum()}
             placeholder="New album name"
-            disabled={busy || !config.has_api_key}
+            disabled={busy || !isConfigured}
             className="flex-1 rounded-lg border-slate-300 text-sm dark:border-slate-700 dark:bg-slate-800"
           />
           <button
             onClick={createAlbum}
-            disabled={busy || !newAlbum.trim() || !config.has_api_key}
-            className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
+            disabled={busy || !newAlbum.trim() || !isConfigured}
+            className="rounded-lg bg-brand-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50"
           >
             Create
           </button>

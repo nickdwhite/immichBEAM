@@ -14,7 +14,11 @@ export function Onboarding({
   onNavigate: (t: Tab) => void;
   onSaved: () => void;
 }) {
-  const serverDone = config.has_api_key && !!config.server_url;
+  // Configured with either an API key or a logged-in password session.
+  const serverDone =
+    !!config.server_url &&
+    ((config.auth_method === "api_key" && config.has_api_key) ||
+      config.auth_method === "password");
   const folderDone = config.folders.length > 0;
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [adding, setAdding] = useState<string | null>(null);
