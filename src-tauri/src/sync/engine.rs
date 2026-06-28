@@ -1826,7 +1826,12 @@ fn extension_content_ok(path: &Path) -> bool {
         .map(|e| e.to_ascii_lowercase())
         .as_deref()
     {
-        Some("ts") => is_mpeg_ts(path),
+        // `.ts`/`.mts`/`.m2ts`/`.cts` are ambiguous: each can be an MPEG
+        // transport-stream video OR TypeScript source. (`.mts`/`.cts` are the
+        // ES-module / CommonJS TS variants, and a declaration like `index.d.mts`
+        // surfaces here with extension `mts`.) Sniff the sync bytes so code and
+        // other text is rejected instead of being queued as video.
+        Some("ts" | "mts" | "m2ts" | "cts") => is_mpeg_ts(path),
         _ => true,
     }
 }
@@ -1976,8 +1981,23 @@ mod tests {
         // Non-ambiguous extensions are trusted without reading.
         assert!(extension_content_ok(std::path::Path::new("/x/photo.jpg")));
 
+        // `.mts` is equally ambiguous: a real AVCHD clip is video, but a
+        // TypeScript declaration like `index.d.mts` (extension `mts`) is text.
+        let mts_video = dir.join("immich_test_clip.mts");
+        std::fs::File::create(&mts_video)
+            .unwrap()
+            .write_all(&buf)
+            .unwrap();
+        assert!(extension_content_ok(&mts_video));
+
+        let decl = dir.join("index.d.mts");
+        std::fs::write(&decl, b"export declare const x: number;\n").unwrap();
+        assert!(!extension_content_ok(&decl));
+
         let _ = std::fs::remove_file(&video);
         let _ = std::fs::remove_file(&code);
+        let _ = std::fs::remove_file(&mts_video);
+        let _ = std::fs::remove_file(&decl);
     }
 
     #[test]
