@@ -83,7 +83,7 @@ export function Sidebar({
         <Logo size={32} className="rounded-lg" />
         <div className="leading-tight">
           <div className="text-sm font-semibold">Immich</div>
-          <div className="text-xs text-slate-500">Dock</div>
+          <div className="text-xs text-slate-500">Beam</div>
         </div>
       </div>
 

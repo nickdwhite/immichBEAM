@@ -50,9 +50,12 @@ export function SyncSettings({
   };
 
   return (
-    <div className="max-w-xl space-y-8">
+    <div className="max-w-xl space-y-6">
       <div>
-        <label className="flex items-center justify-between text-sm font-medium">
+        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+          Performance
+        </h3>
+        <label className="flex items-center justify-between text-sm font-medium" title="How many files to upload at once — higher values use more bandwidth and CPU">
           Upload concurrency
           <span className="font-mono text-brand-600">{concurrency}</span>
         </label>
@@ -70,7 +73,7 @@ export function SyncSettings({
       </div>
 
       <div>
-        <label className="mb-1 block text-sm font-medium">
+        <label className="mb-1 block text-sm font-medium" title="Cap upload speed to avoid saturating your network — 0 means no limit">
           Bandwidth limit (KB/s)
         </label>
         <input
@@ -83,28 +86,38 @@ export function SyncSettings({
         <p className="mt-1 text-xs text-slate-400">0 = unlimited.</p>
       </div>
 
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={autostart}
-          onChange={(e) => setAutostart(e.target.checked)}
-          className="rounded border-slate-300 text-brand-600"
-        />
-        Launch Immich Beam automatically on login
-      </label>
+      <div className="border-t border-slate-200 pt-5 dark:border-slate-800">
+        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+          Behavior
+        </h3>
+        <div className="space-y-4">
+          <label className="flex items-center gap-2 text-sm" title="Start Immich Beam when you log in to your computer">
+            <input
+              type="checkbox"
+              checked={autostart}
+              onChange={(e) => setAutostart(e.target.checked)}
+              className="rounded border-slate-300 text-brand-600"
+            />
+            Launch automatically on login
+          </label>
 
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={notifications}
-          onChange={(e) => setNotifications(e.target.checked)}
-          className="rounded border-slate-300 text-brand-600"
-        />
-        Show desktop notifications (e.g. when an upload fails)
-      </label>
+          <label className="flex items-center gap-2 text-sm" title="Show a system notification when uploads fail or complete">
+            <input
+              type="checkbox"
+              checked={notifications}
+              onChange={(e) => setNotifications(e.target.checked)}
+              className="rounded border-slate-300 text-brand-600"
+            />
+            Desktop notifications
+          </label>
+        </div>
+      </div>
 
-      <div>
-        <label className="mb-1 block text-sm font-medium">
+      <div className="border-t border-slate-200 pt-5 dark:border-slate-800">
+        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+          Conflict Resolution
+        </h3>
+        <label className="mb-1 block text-sm font-medium" title="What happens when a file you already uploaded changes on disk">
           When a synced file changes
         </label>
         <select
@@ -120,8 +133,11 @@ export function SyncSettings({
         </p>
       </div>
 
-      <div>
-        <label className="flex items-center gap-2 text-sm">
+      <div className="border-t border-slate-200 pt-5 dark:border-slate-800">
+        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+          Diagnostics
+        </h3>
+        <label className="flex items-center gap-2 text-sm" title="Enable per-file logging of hashes, duplicate checks, and upload steps">
           <input
             type="checkbox"
             checked={debug}
@@ -136,6 +152,7 @@ export function SyncSettings({
         </p>
       </div>
 
+      <div className="border-t border-slate-200 pt-5 dark:border-slate-800">
       <button
         onClick={save}
         disabled={saving}
@@ -144,6 +161,7 @@ export function SyncSettings({
         {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
         Save settings
       </button>
+      </div>
     </div>
   );
 }

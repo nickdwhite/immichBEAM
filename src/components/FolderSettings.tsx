@@ -210,7 +210,9 @@ export function FolderSettings({
   return (
     <div className="max-w-2xl space-y-6">
       <div>
-        <label className="mb-2 block text-sm font-medium">Album organization</label>
+        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+          Album Organization
+        </h3>
         <div className="flex rounded-lg border border-slate-200 dark:border-slate-700">
           {(["off", "device", "folder"] as const).map((mode, i) => (
             <button
@@ -238,9 +240,9 @@ export function FolderSettings({
         </p>
       </div>
 
-      <div>
+      <div className="border-t border-slate-200 pt-5 dark:border-slate-800">
         <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-sm font-medium">Watched folders</h3>
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">Watched Folders</h3>
           <button
             onClick={pickFolder}
             disabled={busy || inspecting}
@@ -360,8 +362,8 @@ export function FolderSettings({
         )}
       </div>
 
-      <div>
-        <label className="mb-1 block text-sm font-medium">Create album</label>
+      <div className="border-t border-slate-200 pt-5 dark:border-slate-800">
+        <label className="mb-1 block text-sm font-medium" title="Create an album on your Immich server, then assign it to a folder above">Create album</label>
         <div className="flex gap-2">
           <input
             type="text"
@@ -408,6 +410,7 @@ export function FolderSettings({
               }
             }}
             disabled={reorganizing || busy || !isConfigured}
+            title="Backfill album assignments for files that were uploaded before an album was set"
             className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
           >
             {reorganizing ? (
@@ -418,13 +421,14 @@ export function FolderSettings({
             Reorganize into albums
           </button>
           <p className="mt-1 text-xs text-slate-400">
-            Adds previously-uploaded assets to their folder's assigned album.
+            Adds previously-uploaded assets to their target album. This is
+            additive — it won't remove assets from any album.
           </p>
         </div>
       )}
 
-      <div>
-        <label className="mb-1 block text-sm font-medium">File type filter</label>
+      <div className="border-t border-slate-200 pt-5 dark:border-slate-800">
+        <label className="mb-1 block text-sm font-medium" title="Only files with these extensions will be uploaded">File type filter</label>
         <textarea
           value={extInput}
           onChange={(e) => setExtInput(e.target.value)}

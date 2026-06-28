@@ -277,3 +277,14 @@ New feature ideas, partially inspired by reviewing
       album creation/find-by-name with id caching; a folder's explicit `album_id`
       always overrides the mode. Mode switch affects future uploads only;
       "Reorganize" reapplies the current mode to existing assets. *(v0.3.6)*
+
+### Multi-server
+- [ ] **Multi-server support** — allow connecting to more than one Immich server
+      at a time. Each server would have its own credentials (keychain entries),
+      connection status, and album list. Folders could be assigned to a specific
+      server, or uploaded to all. Requires rethinking `AppConfig` (single
+      `server_url` → `servers: Vec<ServerConfig>`), the engine (one client per
+      server), the `uploaded_assets` table (add a `server_id` column), and the
+      ServerSettings UI (list of servers with add/remove/edit). The sync engine
+      would need to fan out uploads to multiple targets or let each folder
+      declare its target server.

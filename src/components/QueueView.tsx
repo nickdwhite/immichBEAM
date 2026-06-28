@@ -51,6 +51,7 @@ export function QueueView({ status }: { status: SyncStatus }) {
       <div className="flex items-center gap-3">
         <button
           onClick={() => (paused ? api.resume() : api.pause())}
+          title={paused ? "Resume processing the upload queue" : "Pause all uploads"}
           className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
         >
           {paused ? <Play size={16} /> : <Pause size={16} />}
@@ -59,6 +60,7 @@ export function QueueView({ status }: { status: SyncStatus }) {
         <button
           onClick={() => api.rescan()}
           disabled={busy}
+          title="Re-scan all watched folders for new or changed files"
           className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
         >
           <RefreshCw size={16} /> Rescan
@@ -66,7 +68,7 @@ export function QueueView({ status }: { status: SyncStatus }) {
         <button
           onClick={repair}
           disabled={busy}
-          title="Unstick active items, drop missing files, fill in sizes"
+          title="Unstick active items, remove missing files, and fill in sizes"
           className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
         >
           {busy ? <Loader2 size={16} className="animate-spin" /> : <Wrench size={16} />}
@@ -75,6 +77,7 @@ export function QueueView({ status }: { status: SyncStatus }) {
         <button
           onClick={() => setConfirmClear(true)}
           disabled={busy || items.length === 0}
+          title="Remove all pending items from the queue — files on disk are untouched"
           className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-immich-600 hover:bg-immich-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-immich-900/30"
         >
           <Trash2 size={16} /> Clear

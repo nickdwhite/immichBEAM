@@ -75,6 +75,7 @@ export function Overview({
         <div className="flex gap-2">
           <button
             onClick={() => (paused ? api.resume() : api.pause())}
+            title={paused ? "Resume processing the upload queue" : "Pause all uploads"}
             className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
           >
             {paused ? <Play size={16} /> : <Pause size={16} />}
@@ -82,6 +83,7 @@ export function Overview({
           </button>
           <button
             onClick={() => api.rescan()}
+            title="Re-scan all watched folders for new or changed files"
             className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
           >
             <RefreshCw size={16} /> Rescan

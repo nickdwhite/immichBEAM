@@ -217,14 +217,14 @@ export function ServerSettings({
 
       <div>
         <div className="mb-1 flex items-center justify-between">
-          <label className="text-sm font-medium">Server URL</label>
+          <label className="text-sm font-medium" title="The base URL of your Immich server, including port">Server URL</label>
           <SecurityBadge url={url} />
         </div>
         <input
           type="url"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
-          placeholder="http://192.168.2.119:2283"
+          placeholder="http://your-server:2283"
           className="w-full rounded-lg border-slate-300 text-sm dark:border-slate-700 dark:bg-slate-800"
         />
       </div>
@@ -233,6 +233,7 @@ export function ServerSettings({
         <button
           onClick={detectSso}
           disabled={detecting || !url}
+          title="Probe the server to check if it supports SSO/OAuth login"
           className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
         >
           {detecting ? <Loader2 size={14} className="animate-spin" /> : <ScanSearch size={14} />}
@@ -258,9 +259,10 @@ export function ServerSettings({
         )}
       </div>
 
-      {/* Auth method tabs */}
-      <div>
-        <label className="mb-2 block text-sm font-medium">Authentication</label>
+      <div className="border-t border-slate-200 pt-5 dark:border-slate-800">
+        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+          Authentication
+        </h3>
         <div className="flex rounded-lg border border-slate-200 dark:border-slate-700">
           <button
             onClick={() => { setAuthTab("api_key"); setResult(null); }}
@@ -394,15 +396,18 @@ export function ServerSettings({
         </>
       )}
 
-      <div className="space-y-2">
-        <label className="flex items-center gap-2 text-sm">
+      <div className="space-y-2 border-t border-slate-200 pt-5 dark:border-slate-800">
+        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+          Security
+        </h3>
+        <label className="flex items-center gap-2 text-sm" title="Enable trust-on-first-use certificate pinning for self-signed servers">
           <input
             type="checkbox"
             checked={allowInsecure}
             onChange={(e) => setAllowInsecure(e.target.checked)}
             className="rounded border-slate-300 text-brand-600"
           />
-          Trust a self-signed certificate (pin it on first connection)
+          Trust a self-signed certificate (pin on first connection)
         </label>
         <p className="ml-6 text-xs text-slate-400">
           The server's certificate is captured and pinned the first time it
