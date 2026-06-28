@@ -236,17 +236,50 @@ New feature ideas, partially inspired by reviewing
       dropdown in Sync Settings. ✅
 
 ### Authentication
-- [x] **Username/password login** — `POST /auth/login` is wired as an
-      alternative to API key auth (commit `4cb617b`). User enters email +
-      password → we get a JWT bearer token → used for all API calls. Credentials
-      stored in the OS keychain (`login-email`/`login-password`/`login-token`),
-      ServerSettings offers API-Key / Email-Password tabs. ✅
+- [x] **Username/password login** — `POST /api/auth/login` is wired as an
+      alternative to API key auth (commit `4cb617b`; endpoint-prefix bug fixed in
+      `2e1be29`). User enters email + password → we get a JWT bearer token → used
+      for all API calls. Credentials stored in the OS keychain
+      (`login-email`/`login-password`/`login-token`); ServerSettings offers
+      API-Key / Email-Password tabs. Auth diagnostics (attempt, response status,
+      full error chain) logged at every stage (`b3d4542`). ✅
 - [x] **Automatic token refresh** — when the JWT bearer token expires (401),
       the sync engine re-logs in transparently using the stored email/password
       and swaps in the fresh bearer token. The refresh is serialized and
       throttled (≥20 s apart) so a 401 storm across upload workers triggers at
       most one re-login. `sync::engine::try_refresh_login`. ✅
-- [ ] **OAuth login** — support Immich's OAuth2 flow (`POST /oauth/authorize` →
-      `POST /oauth/callback`) for servers configured with an external identity
-      provider. Requires opening a browser for the authorization step and
-      capturing the callback.
+- [x] **SSO/OAuth capability detection** — `GET /api/server/features` is probed
+      via a "Detect SSO" button in ServerSettings to report whether the server
+      advertises OAuth, before committing to the full flow. `ServerFeatures` DTO
+      + `ImmichClient::server_features` + `check_server_features` command
+      (`5c6f253`). ✅
+- [ ] **OAuth login (full loopback flow)** — designed, not built. Confirmed flow
+      (from Immich OpenAPI + source): `POST /api/oauth/authorize` (cookie-storing
+      client) → open returned `url` in system browser → capture `?code=&state=`
+      on a loopback `tokio::net::TcpListener` → `POST /api/oauth/callback`
+      `{url}` replaying cookies → `LoginResponse` (reuse the bearer-token path).
+      Requires adding the `cookies` feature to `reqwest`. Deferred until a server
+      with OAuth/SSO is confirmed (homelab servers usually use API-key/password).
+
+### Albums
+- [ ] **Album reconciliation (move on reassign + Reorganize button)** — when a
+      folder's assigned album changes, bulk-add the folder's already-synced
+      assets to the new album and bulk-remove them from the old
+      (`PUT /api/albums/assets`, `DELETE /api/albums/{id}/assets`). Also a
+      per-folder/global "Reorganize into album" action. **Blocker found:** the
+      `upload_history` table has no `path` column (only a queue-uuid `id` + a
+      basename `filename`), so there is no folder→asset_id mapping yet. Planned
+      fix: add a dedicated `uploaded_assets(path, asset_id, album_id)` table
+      (additive; one write site in `process_one`), queried by path prefix.
+- [ ] **Album organization modes (`album_mode`)** — a global setting on the
+      Folders tab: `off` (default; current per-folder dropdown only) /
+      `device` (one album named after this machine's hostname — re-introduces
+      device provenance, which Immich's v3 API dropped) / `folder` (each folder
+      → album named after its basename, mirroring mobile "Album Sync"). Lazy
+      album creation/find-by-name with id caching; a folder's explicit `album_id`
+      always overrides the mode. Mode switch affects future uploads only;
+      "Reorganize" reapplies the current mode to existing assets.
+      **Research note:** current Immich has NO `deviceId`/`deviceAssetId`/
+      `x-immich-device-id`/`/api/devices` — provenance must be tracked
+      client-side via the local DB; the `beam-<uuid>` device id is client-side
+      only.
