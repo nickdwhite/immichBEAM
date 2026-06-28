@@ -4,6 +4,34 @@ All notable changes to Immich Beam are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.6] - 2026-06-28
+
+### Added
+
+- **Album reconciliation** — changing a folder's assigned album now bulk-moves
+  already-uploaded assets (adds to the new album, removes from the old). A new
+  `uploaded_assets` table tracks path → asset id → album id for reconciliation.
+- **"Reorganize into albums" button** — re-applies current album assignments to
+  previously-uploaded assets that aren't yet in their target album (additive,
+  matching the Immich mobile app's behavior).
+- **Album organization modes** — a global setting at the top of the Folders tab:
+  - **Off** (default): manual per-folder album dropdowns only.
+  - **Device**: all uploads go to one album named after this computer's hostname.
+  - **Folder**: each watched folder creates/finds an album by its basename.
+  A folder's explicit album dropdown always overrides the mode. Mode switch
+  affects future uploads only; use "Reorganize" to backfill existing assets.
+- **Shared `isServerConfigured()` helper** — replaces three inline copies of the
+  `server_url + (api_key OR password)` check, preventing regressions.
+- `ImmichClient::remove_from_album` — `DELETE /api/albums/{id}/assets` for bulk
+  removal (used by album reconciliation).
+
+### Fixed
+
+- `LoginResponse` doc comment referenced wrong endpoint (`/auth/login` →
+  `/api/auth/login`).
+- `authTab` state in ServerSettings could desync from `config.auth_method` after
+  disconnecting (added `useEffect` sync).
+
 ## [0.3.1] - 2026-06-22
 
 The "immich-beam" release: a full rebrand plus a round of features, security
@@ -72,5 +100,6 @@ limits and streaming progress, per-folder albums, "Free Up Space", a grouped
 dashboard, OS-keychain API-key storage, in-app auto-update wiring, and CI +
 release workflows for macOS / Windows / Linux.
 
-[0.3.1]: https://github.com/REPLACE_OWNER/immich-beam/releases/tag/v0.3.1
-[0.1.0]: https://github.com/REPLACE_OWNER/immich-beam/releases/tag/v0.1.0
+[0.3.6]: https://github.com/nickdwhite/immich-beam/releases/tag/v0.3.6
+[0.3.1]: https://github.com/nickdwhite/immich-beam/releases/tag/v0.3.1
+[0.1.0]: https://github.com/nickdwhite/immich-beam/releases/tag/v0.1.0

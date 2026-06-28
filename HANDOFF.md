@@ -7,9 +7,9 @@ Last updated: 2026-06-28
 - Local repo path: `/Users/ndw-eiq/Downloads/projects/immich-syncdesk`
 - App name: **Immich Beam** (renamed from Immich Dock on 2026-06-27)
 - Package/folder name: `immich-syncdesk` (intentionally unchanged)
-- Version: `0.3.5` (`tauri.conf.json`, `Cargo.toml`, `package.json`)
+- Version: `0.3.6` (`tauri.conf.json`, `Cargo.toml`, `package.json`)
 - Current branch: `main`
-- Current HEAD: `23f717a` (`Load albums and advance onboarding for password auth`)
+- Current HEAD: `5ee32dd` (`Add album organization modes (off/device/folder)`)
 - Working tree status at handoff: **clean** (all changes committed and pushed)
 - GitHub repo: `nickdwhite/immich-beam` — <https://github.com/nickdwhite/immich-beam>
 - Visibility: `PRIVATE` · Default branch: `main`
@@ -32,6 +32,8 @@ Original goal (Ubuntu ARM release) was already resolved before this session and 
 - `2e1be29` **Fix password login endpoint** — was POSTing to `/auth/login` instead of `/api/auth/login` (Immich mounts everything under `/api`), so login 404'd regardless of credentials.
 - `b3d4542` **Auth diagnostics logging + full error chain** — `login()` logs at every stage (attempt, endpoint, response status, 401, decode, success) with `{:#}` formatting so the full anyhow cause chain prints. `login_with_password` maps errors with `format!("{e:#}")` so the UI shows the real cause, not just "login request failed".
 - `23f717a` **Load albums + advance onboarding for password auth** — album loading/creation and the onboarding checklist were gated on `config.has_api_key` (always false for password users). Fixed with the `isConfigured` check (server_url + (api_key OR password)) in `FolderSettings` and `Onboarding`.
+- `b0606d7` **Album reconciliation + shared `isServerConfigured` helper** — `uploaded_assets(path, asset_id, album_id)` table for path→asset tracking; `record_uploaded` in `process_one`; `reconcile_folder_album` on reassign (bulk add/remove, batched at 250); `reorganize_albums` command + frontend button; `remove_from_album` client method; shared `isServerConfigured()` helper replacing 3 inline copies.
+- `5ee32dd` **Album organization modes (off/device/folder)** — `AlbumMode` enum with `#[derive(Default)]`; `album_mode` + `device_album_id` config fields; mode-aware `album_for_path` resolver with precedence (explicit > device > folder > off); lazy `resolve_album_by_name` with in-memory cache; segmented control in FolderSettings.
 
 ### Verified live against a real server
 Password login confirmed working against `http://192.168.2.119:2283` (user is admin). Diagnostics emit correctly to stdout + `~/Library/Logs/com.immichbeam.desktop/immich-beam.log`.
@@ -50,27 +52,12 @@ Only release-signing values are relevant; tracked example `.env.release.local.ex
 - `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (placeholders, not in repo).
 - The Immich API key / password live in the OS keychain, NOT in `.env`. The app does not load `.env` at runtime.
 
-## Active next work — Album reconciliation + organization modes
+## Completed this arc — Album reconciliation + organization modes (v0.3.6)
 
-This is the agreed next feature. **Design is locked; implementation had NOT started at handoff (clean tree).** See `docs/TODO.md §7 Albums` for the tracked items.
+Both stages shipped on `main`, each committed green (`tsc` + `cargo test` + `clippy`):
 
-### Problem found this session
-Changing a folder's assigned album does **not** move already-uploaded assets. Album membership is only recorded at upload time (`engine.rs:631`, `queue_album_add`, gated on `album_for_path`). A rescan does fire (WatchedFolder is `PartialEq`) but it skips cached/already-synced files (`scan_all` → `cached_hash`), so existing assets are never re-evaluated. Nothing is removed from the old album either.
-
-### Locked design decisions
-1. **Full reconciliation (move)** — on reassign: bulk-ADD folder's assets to the new album, bulk-REMOVE from the old. Plus a manual "Reorganize into album" action (additive — re-applies current target, matches mobile app).
-2. **`album_mode` global setting** on the Folders tab: `off` (default) / `device` (one album named after this machine's hostname — re-introduces device provenance, which Immich v3 dropped) / `folder` (each folder → album by basename, mirroring mobile "Album Sync").
-3. **Precedence**: a folder's explicit `album_id` (dropdown) always overrides the mode.
-4. **Lazy album creation**: create-or-find-by-exact-name on first qualifying upload; cache the id.
-5. **Mode switch = future uploads only**; "Reorganize" reapplies to existing assets.
-
-### Key implementation blocker + plan
-The `upload_history` table has **no `path` column** (only a queue-uuid `id` + basename `filename`), so there is no folder→asset_id mapping to reconcile against. **Planned fix (additive, low blast-radius):** add a new `uploaded_assets(path PRIMARY KEY, asset_id, album_id)` table:
-- One write site: `process_one` on success/duplicate → `record_uploaded(path, asset_id, album_id)`.
-- `asset_ids_for_folder(prefix)` → query by path prefix; `album_id` per row gives the "current album" for the move case.
-- New client method `remove_from_album(album_id, asset_ids)` → `DELETE /api/albums/{id}/assets` body `{ids}` (`add_to_album` / `PUT /api/albums/{id}/assets` already exists).
-
-Suggested build order: (1) `uploaded_assets` table + `record_uploaded` + `asset_ids_for_folder` + `remove_from_album`; (2) engine `reconcile_folder_album` on reassign (detect old-vs-new in `apply_config`) + global `reorganize_albums()`; (3) `reorganize_albums` command + frontend button; (4) `AlbumMode` enum + config fields + `hostname` crate + mode-aware resolver swapped into `album_for_path`; (5) frontend segmented control.
+- **Stage 1** (`b0606d7`): `uploaded_assets` table, `record_uploaded`/`assets_for_folder`/`update_uploaded_album` in db.rs, `remove_from_album` client method, engine reconciliation on folder album reassign, `reorganize_albums` command + frontend button, shared `isServerConfigured()` helper.
+- **Stage 2** (`5ee32dd`): `AlbumMode` enum (off/device/folder), config fields (`album_mode`, `device_album_id`), mode-aware `album_for_path` resolver, lazy `resolve_album_by_name` with cache, segmented control in FolderSettings.tsx.
 
 ## Critical research findings (don't re-research these)
 
@@ -82,10 +69,8 @@ Confirmed from Immich `main` source + OpenAPI spec:
 
 ## Known limitations / follow-ups
 
-1. **Album reassign doesn't reconcile** (the bug above) — the active next work.
-2. **OAuth full flow not built** — detect-only is in place; full loopback flow deferred.
-3. **Clippy: 7 individual warnings, all pre-existing** (ConflictPolicy/AuthMethodConfig Default-derive style, `upload_asset` 9-arg count, `Default::default()` field assignment, manual `is_multiple_of`, `io::Error::other`, `u64` cast). Consistent with the project's "clippy passes with warnings" tolerance.
-4. **Three copies of the `isConfigured` check** (`ServerSettings`, `FolderSettings`, `Onboarding`) — worth a shared `isServerConfigured(config)` helper to prevent the `has_api_key` regression recurring.
+1. **OAuth full flow not built** — detect-only is in place; full loopback flow deferred.
+2. **Clippy: 7 individual warnings, all pre-existing** (ConflictPolicy/AuthMethodConfig Default-derive style, `upload_asset` 9-arg count, `Default::default()` field assignment, manual `is_multiple_of`, `io::Error::other`, `u64` cast). Consistent with the project's "clippy passes with warnings" tolerance.
 
 ## Useful commands
 
@@ -93,7 +78,7 @@ Confirmed from Immich `main` source + OpenAPI spec:
 # Frontend + backend checks
 pnpm build                      # tsc && vite build
 npx tsc --noEmit
-cargo test                     # from src-tauri/  (28 tests)
+cargo test                     # from src-tauri/  (29 tests)
 cargo clippy --no-deps --all-targets
 
 # Run the app (hot-reload; frontend on :1420, Rust rebuilds on src-tauri changes)
@@ -114,6 +99,5 @@ git push origin v0.3.5
 
 ## Suggested next objective
 
-1. **Implement album reconciliation** (Stage 1: `uploaded_assets` table + reassign-move + Reorganize button), per the plan above. Commit each stage green (`tsc` + `cargo test` + `clippy`).
-2. **Implement `album_mode`** (Stage 2: off/device/folder with lazy album creation).
-3. Then reassess: OAuth full flow (if a server with SSO is available), or a different roadmap item from `docs/TODO.md`.
+1. **OAuth full loopback flow** (if a server with SSO is available) — detect-only is in place; see `docs/TODO.md §7 OAuth`.
+2. Or pick another roadmap item from `docs/TODO.md`.
