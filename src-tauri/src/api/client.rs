@@ -537,18 +537,18 @@ impl ImmichClient {
 
     /// `POST /api/search/metadata` — one page of the asset timeline/grid.
     /// `asset_type` filters to `"IMAGE"` or `"VIDEO"` (None = both). `size` is
-    /// clamped to the server max of 250.
+    /// clamped to the server max of 1000.
     /// `POST /api/search/metadata` — one page of the asset timeline/grid, with
     /// the full filter set (text query, type, favorite/archive/trash/not-in-
     /// album, date range, camera make/model, people). `size` is clamped to the
-    /// server max of 250 and EXIF is omitted (not needed for the grid listing).
+    /// server max of 1000 and EXIF is omitted (not needed for the grid listing).
     pub async fn search_assets(
         &self,
         search: &MetadataSearch,
     ) -> Result<MetadataSearchResponse> {
         let mut body = serde_json::to_value(search)?;
         if let Some(obj) = body.as_object_mut() {
-            obj.insert("size".into(), serde_json::json!(search.size.min(250)));
+            obj.insert("size".into(), serde_json::json!(search.size.min(1000)));
             obj.insert("withExif".into(), false.into());
         }
         let resp = self
@@ -573,7 +573,7 @@ impl ImmichClient {
         let body = serde_json::json!({
             "query": query,
             "page": page,
-            "size": size.min(250),
+            "size": size.min(1000),
             "withExif": false,
         });
         let resp = self
