@@ -4,6 +4,41 @@ All notable changes to Immich Beam are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.0-beta.1] - 2026-06-29
+
+### Added
+
+- **Remote Photo Browser** — browse your entire Immich library from the desktop
+  app. Includes Timeline (infinite scroll), Albums, People (face grid), Places
+  (city cards), and Map (Leaflet + clustered markers with hover previews).
+- **Search** — filename search, smart/CLIP semantic search, quick filters
+  (favorites, archive, not-in-album), tag dropdown, and date range calendar.
+- **Lightbox** — full-featured media viewer with GPS, timezone, camera, EXIF,
+  people chips (clickable), tags, download, server link, and video autoplay.
+- **Custom URI scheme** (`immichasset://`) — Rust proxy injects auth headers and
+  serves thumbnails, video (Range passthrough), SVG originals, and face
+  thumbnails to the webview without exposing credentials to the frontend.
+- **Immich v2/v3 compatibility** — dual-send shims for `isArchived`/`visibility`
+  and `query`/`originalFileName`; custom `duration` deserializer accepts both
+  string and integer formats.
+
+### Performance
+
+- MapView lazy-loaded via `React.lazy` — initial JS bundle reduced ~35%.
+- Album view renders 60 tiles at a time with IntersectionObserver pagination.
+- Tags cached at module level (fetched once per session).
+
+### Security
+
+- Download destination validated within user's home directory.
+- Proxy response body capped at 256 MB.
+- Map tooltip HTML guarded by UUID validation.
+- CSP: `frame-ancestors 'none'` added.
+
+### Dependencies
+
+- Added `leaflet` 1.9.4 and `leaflet.markercluster` 1.5.3.
+
 ## [0.3.8] - 2026-06-28
 
 ### Added
