@@ -10,6 +10,9 @@ import type {
   BrowsePage,
   ConfigDto,
   MetadataSearch,
+  MapMarker,
+  Person,
+  Tag,
   ConnectionInfo,
   FolderInspect,
   FreeableScan,
@@ -125,6 +128,10 @@ export const api = {
     invoke<BrowsePage>("browse_smart", { query, page, size }),
   getAssetDetail: (assetId: string) =>
     invoke<AssetDetail>("get_asset_detail", { assetId }),
+  browseTags: () => invoke<Tag[]>("browse_tags"),
+  browsePeople: () => invoke<Person[]>("browse_people"),
+  browseCities: () => invoke<AssetDetail[]>("browse_cities"),
+  browseMap: () => invoke<MapMarker[]>("browse_map"),
   getLocalPath: (assetId: string) =>
     invoke<string | null>("get_local_path", { assetId }),
   browseAlbumAssets: (albumId: string) =>

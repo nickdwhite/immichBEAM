@@ -211,6 +211,8 @@ export interface MetadataSearch {
   page: number;
   size: number;
   query?: string;
+  originalFileName?: string;
+  description?: string;
   type?: "IMAGE" | "VIDEO" | "AUDIO" | "OTHER";
   isFavorite?: boolean;
   isArchived?: boolean;
@@ -220,7 +222,32 @@ export interface MetadataSearch {
   takenBefore?: string;
   make?: string;
   model?: string;
+  city?: string;
+  state?: string;
+  country?: string;
   personIds?: string[];
+  tagIds?: string[];
+}
+
+export interface Tag {
+  id: string;
+  name?: string;
+  value?: string;
+  color?: string;
+}
+
+export interface Person {
+  id: string;
+  name?: string;
+  thumbnailPath?: string;
+  isHidden?: boolean;
+  isFavorite?: boolean;
+}
+
+export interface MapMarker {
+  id: string;
+  lat: number;
+  lon: number;
 }
 
 export interface ExifInfo {
@@ -237,11 +264,13 @@ export interface ExifInfo {
   city?: string | null;
   state?: string | null;
   country?: string | null;
-  fileSizeBytes?: number | null;
+  fileSizeInByte?: number | null;
   description?: string | null;
   orientation?: string | null;
-  resolutionX?: number | null;
-  resolutionY?: number | null;
+  exifImageWidth?: number | null;
+  exifImageHeight?: number | null;
+  rating?: number | null;
+  timeZone?: string | null;
 }
 
 export interface AssetDetail {
@@ -255,4 +284,19 @@ export interface AssetDetail {
   exifInfo?: ExifInfo | null;
   isFavorite?: boolean;
   livePhotoVideoId?: string | null;
+  width?: number | null;
+  height?: number | null;
+  duration?: string | null;
+  localDateTime?: string | null;
+  createdAt?: string | null;
+  isArchived?: boolean;
+  isTrashed?: boolean;
+  isOffline?: boolean;
+  tags?: Tag[];
+  people?: PersonBrief[];
+}
+
+export interface PersonBrief {
+  id: string;
+  name?: string;
 }

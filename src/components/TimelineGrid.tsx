@@ -1,25 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Archive,
+  Calendar,
   Image as ImageIcon,
   Images,
   Loader2,
   Search,
-  SlidersHorizontal,
   Sparkles,
   Star,
   Video,
-  X,
 } from "lucide-react";
-import {
-  DEFAULT_FILTERS,
-  useBrowse,
-  type BrowseFilters,
-  type BrowseMode,
-} from "../hooks/useBrowse";
+import { DEFAULT_FILTERS, useBrowse, type BrowseFilters, type BrowseMode } from "../hooks/useBrowse";
+import { api } from "../lib/tauri";
 import { PhotoTile } from "./PhotoTile";
 import { PhotoLightbox } from "./PhotoLightbox";
-import type { BrowseAsset } from "../types";
+import { RangeCalendar } from "./RangeCalendar";
+import type { BrowseAsset, Tag } from "../types";
 
 type TypeFilter = BrowseFilters["type"];
 
@@ -36,13 +32,44 @@ const toggleChip = (active: boolean): string =>
       : "border border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
   }`;
 
-export function TimelineGrid({ serverUrl }: { serverUrl: string }) {
+/** Local YYYY-MM-DD for today shifted back by the given days/months/years. */
+function shiftDate(days = 0, months = 0, years = 0): string {
+  const d = new Date();
+  if (days) d.setDate(d.getDate() - days);
+  if (months) d.setMonth(d.getMonth() - months);
+  if (years) d.setFullYear(d.getFullYear() - years);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** Compact filled pill for date presets (distinct from the bordered filter chips). */
+const presetChip = (active: boolean): string =>
+  `inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+    active
+      ? "bg-brand-600 text-white"
+      : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+  }`;
+
+export function TimelineGrid({
+  serverUrl,
+  onPersonClick,
+}: {
+  serverUrl: string;
+  onPersonClick?: (personId: string, name: string) => void;
+}) {
   const [filters, setFilters] = useState<BrowseFilters>(DEFAULT_FILTERS);
   const [mode, setMode] = useState<BrowseMode>("metadata");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [active, setActive] = useState<BrowseAsset | null>(null);
   const { items, loading, error, hasMore, loadMore } = useBrowse(filters, mode);
   const sentinel = useRef<HTMLDivElement>(null);
+
+  const [tags, setTags] = useState<Tag[]>([]);
+  useEffect(() => {
+    api.browseTags().then(setTags).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const el = sentinel.current;
@@ -65,6 +92,21 @@ export function TimelineGrid({ serverUrl }: { serverUrl: string }) {
   const smartActive = mode === "smart";
   const hasDate = Boolean(filters.takenAfter || filters.takenBefore);
 
+  const presets = [
+    { label: "30 days", after: shiftDate(30) },
+    { label: "90 days", after: shiftDate(90) },
+    { label: "6 months", after: shiftDate(0, 6) },
+    { label: "1 year", after: shiftDate(0, 0, 1) },
+  ];
+  const applyPreset = (after: string) => {
+    set("takenAfter", after);
+    set("takenBefore", "");
+  };
+  const clearDates = () => {
+    set("takenAfter", "");
+    set("takenBefore", "");
+  };
+
   return (
     <div className="space-y-3">
       {/* Search bar + smart/metadata toggle */}
@@ -81,7 +123,7 @@ export function TimelineGrid({ serverUrl }: { serverUrl: string }) {
             placeholder={
               smartActive
                 ? "Smart search — describe what's in the photo…"
-                : "Search by filename or description…"
+                : "Search by filename (e.g. logo, .png)…"
             }
             className="w-full rounded-lg border-slate-300 py-1.5 pl-8 pr-3 text-sm dark:border-slate-700 dark:bg-slate-800"
           />
@@ -135,48 +177,77 @@ export function TimelineGrid({ serverUrl }: { serverUrl: string }) {
           >
             <Images size={14} /> Not in album
           </button>
+          {tags.length > 0 && (
+            <select
+              value={filters.tagId}
+              onChange={(e) => set("tagId", e.target.value)}
+              title="Filter by tag"
+              className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+            >
+              <option value="">All tags</option>
+              {tags.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.value ?? t.name ?? t.id}
+                </option>
+              ))}
+            </select>
+          )}
           <button
             onClick={() => setShowAdvanced((s) => !s)}
             aria-pressed={showAdvanced}
-            className={toggleChip(showAdvanced)}
+            aria-expanded={showAdvanced}
+            title="Filter by date taken"
+            className={toggleChip(showAdvanced || hasDate)}
           >
-            <SlidersHorizontal size={14} /> Dates
+            <Calendar size={14} /> Dates
           </button>
         </div>
       )}
 
-      {/* Collapsible date range */}
+      {/* Date filter — quick ranges + custom range */}
       {!smartActive && showAdvanced && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-700 dark:bg-slate-800/50">
-          <label className="flex items-center gap-1.5">
-            <span className="text-slate-500">Taken after</span>
-            <input
-              type="date"
-              value={filters.takenAfter}
-              onChange={(e) => set("takenAfter", e.target.value)}
-              className="rounded-md border-slate-300 text-sm dark:border-slate-700 dark:bg-slate-800"
+        <div className="rounded-xl border border-slate-200 bg-white p-3 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <div className="space-y-1.5">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              Quick ranges
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                onClick={clearDates}
+                aria-pressed={!hasDate}
+                className={presetChip(!hasDate)}
+              >
+                All time
+              </button>
+              {presets.map((p) => (
+                <button
+                  key={p.label}
+                  onClick={() => applyPreset(p.after)}
+                  aria-pressed={
+                    filters.takenAfter === p.after && !filters.takenBefore
+                  }
+                  className={presetChip(
+                    filters.takenAfter === p.after && !filters.takenBefore,
+                  )}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-3 space-y-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              Custom range
+            </span>
+            <RangeCalendar
+              from={filters.takenAfter}
+              to={filters.takenBefore}
+              onChange={(f, t) =>
+                setFilters((prev) => ({ ...prev, takenAfter: f, takenBefore: t }))
+              }
             />
-          </label>
-          <label className="flex items-center gap-1.5">
-            <span className="text-slate-500">Taken before</span>
-            <input
-              type="date"
-              value={filters.takenBefore}
-              onChange={(e) => set("takenBefore", e.target.value)}
-              className="rounded-md border-slate-300 text-sm dark:border-slate-700 dark:bg-slate-800"
-            />
-          </label>
-          {hasDate && (
-            <button
-              onClick={() => {
-                set("takenAfter", "");
-                set("takenBefore", "");
-              }}
-              className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-            >
-              <X size={12} /> Clear dates
-            </button>
-          )}
+          </div>
         </div>
       )}
 
@@ -212,6 +283,7 @@ export function TimelineGrid({ serverUrl }: { serverUrl: string }) {
           asset={active}
           serverUrl={serverUrl}
           onClose={() => setActive(null)}
+          onPersonClick={onPersonClick}
         />
       )}
     </div>

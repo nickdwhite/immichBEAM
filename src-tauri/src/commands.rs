@@ -4,7 +4,8 @@ use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
 use crate::api::{
-    Album, AssetDetail, BrowseAsset, ConnectionInfo, ImmichClient, MetadataSearch, ServerFeatures,
+    Album, AssetDetail, BrowseAsset, ConnectionInfo, ImmichClient, MapMarker, MetadataSearch,
+    Person, ServerFeatures, Tag,
 };
 use crate::config::{AppConfig, WatchedFolder};
 use crate::db::{HistoryItem, QueueItem};
@@ -537,6 +538,35 @@ pub async fn get_asset_detail(
 ) -> CmdResult<AssetDetail> {
     let client = engine.client().await.ok_or("Not connected to a server")?;
     client.asset_detail(&asset_id).await.map_err(map_err)
+}
+
+/// `GET /api/tags` — all tags, for the tag filter.
+#[tauri::command]
+pub async fn browse_tags(engine: State<'_, SyncEngine>) -> CmdResult<Vec<Tag>> {
+    let client = engine.client().await.ok_or("Not connected to a server")?;
+    client.tags().await.map_err(map_err)
+}
+
+/// `GET /api/people` — recognized people, for the People browser.
+#[tauri::command]
+pub async fn browse_people(engine: State<'_, SyncEngine>) -> CmdResult<Vec<Person>> {
+    let client = engine.client().await.ok_or("Not connected to a server")?;
+    let resp = client.people().await.map_err(map_err)?;
+    Ok(resp.people)
+}
+
+/// `GET /api/search/cities` — one asset per city, for the Places browser.
+#[tauri::command]
+pub async fn browse_cities(engine: State<'_, SyncEngine>) -> CmdResult<Vec<AssetDetail>> {
+    let client = engine.client().await.ok_or("Not connected to a server")?;
+    client.cities().await.map_err(map_err)
+}
+
+/// `GET /api/search/map` — geo markers for the map view.
+#[tauri::command]
+pub async fn browse_map(engine: State<'_, SyncEngine>) -> CmdResult<Vec<MapMarker>> {
+    let client = engine.client().await.ok_or("Not connected to a server")?;
+    client.search_map().await.map_err(map_err)
 }
 
 /// Local path of an asset uploaded from this machine, if any (info panel).

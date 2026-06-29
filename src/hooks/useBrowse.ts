@@ -12,6 +12,7 @@ export interface BrowseFilters {
   isNotInAlbum: boolean;
   takenAfter: string; // YYYY-MM-DD or ""
   takenBefore: string; // YYYY-MM-DD or ""
+  tagId: string; // "" = no tag filter
 }
 
 export const DEFAULT_FILTERS: BrowseFilters = {
@@ -22,6 +23,7 @@ export const DEFAULT_FILTERS: BrowseFilters = {
   isNotInAlbum: false,
   takenAfter: "",
   takenBefore: "",
+  tagId: "",
 };
 
 export type BrowseMode = "metadata" | "smart";
@@ -37,18 +39,28 @@ export function useBrowse(filters: BrowseFilters, mode: BrowseMode) {
   const fetchPage = useCallback(
     async (page: number): Promise<BrowsePage> => {
       if (mode === "smart") {
-        return api.browseSmart(filters.query.trim(), page, PAGE_SIZE);
+        // Smart search requires a non-empty query — short-circuit before the API
+        // call. This also covers loadMore firing while the query is being cleared
+        // (the first-page guard in the effect alone isn't enough).
+        const q = filters.query.trim();
+        if (!q) return { items: [], nextPage: null };
+        return api.browseSmart(q, page, PAGE_SIZE);
       }
+      const q = filters.query.trim() || undefined;
       return api.browseSearch({
         page,
         size: PAGE_SIZE,
-        query: filters.query.trim() || undefined,
+        // Send both: current Immich filters filename via originalFileName; older
+        // servers used the legacy `query` field for filename matching.
+        query: q,
+        originalFileName: q,
         type: filters.type === "all" ? undefined : filters.type,
         isFavorite: filters.isFavorite || undefined,
         isArchived: filters.isArchived || undefined,
         isNotInAlbum: filters.isNotInAlbum || undefined,
         takenAfter: filters.takenAfter || undefined,
         takenBefore: filters.takenBefore || undefined,
+        tagIds: filters.tagId ? [filters.tagId] : undefined,
       });
     },
     [filters, mode],

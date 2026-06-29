@@ -29,3 +29,8 @@ export function videoUrl(id: string): string {
 export function originalUrl(id: string): string {
   return `${ORIGIN}/original/${encodeURIComponent(id)}`;
 }
+
+// A person's face thumbnail — routed to /api/people/{id}/thumbnail.
+export function personUrl(id: string): string {
+  return `${ORIGIN}/person/${encodeURIComponent(id)}`;
+}

@@ -44,3 +44,121 @@ textarea:focus-visible {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* Leaflet map — restyle controls/tooltip to match the app theme (the default
+   white widgets look out of place, especially in dark mode). */
+.leaflet-container {
+  background: #e5e7eb;
+  font: inherit;
+}
+.dark .leaflet-container {
+  background: #0b1220;
+}
+.leaflet-bar {
+  border: none !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2) !important;
+  overflow: hidden;
+  border-radius: 8px !important;
+}
+.leaflet-bar a {
+  background: #ffffff;
+  color: #334155;
+  border-bottom: 1px solid #e2e8f0;
+}
+.leaflet-bar a:hover {
+  background: #f8fafc;
+}
+.dark .leaflet-bar a {
+  background: #1e293b;
+  color: #e2e8f0;
+  border-bottom-color: #334155;
+}
+.dark .leaflet-bar a:hover {
+  background: #334155;
+}
+.leaflet-control-attribution {
+  background: rgba(255, 255, 255, 0.75) !important;
+  color: #64748b !important;
+  font-size: 10px !important;
+  padding: 1px 6px !important;
+  border-radius: 6px 0 0 0;
+}
+.dark .leaflet-control-attribution {
+  background: rgba(15, 23, 42, 0.75) !important;
+  color: #94a3b8 !important;
+}
+.leaflet-control-attribution a {
+  color: #64748b !important;
+}
+.dark .leaflet-control-attribution a {
+  color: #94a3b8 !important;
+}
+/* Thumbnail tooltip: a compact framed preview, themed. */
+.leaflet-tooltip {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  padding: 3px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15) !important;
+}
+.dark .leaflet-tooltip {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5) !important;
+}
+.leaflet-tooltip::before {
+  display: none;
+}
+.immich-map-preview-img {
+  display: block;
+  width: 160px;
+  height: 160px;
+  max-width: none;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #f1f5f9;
+}
+.dark .immich-map-preview-img {
+  background: #0f172a;
+}
+
+/* Custom map markers + clusters (divIcon-based; the custom className replaces
+   Leaflet's `leaflet-div-icon`, so target the custom class directly). The marker
+   is a 24x24 transparent hit area with a brand-blue dot centered, so the hover
+   target is comfortable. */
+.immich-map-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  background: transparent;
+  border: none;
+}
+.immich-map-marker-dot {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #1a90f5;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  transition: transform 0.15s ease;
+}
+.immich-map-marker:hover .immich-map-marker-dot {
+  transform: scale(1.4);
+}
+.immich-map-cluster {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #48a6fb, #0c60b4);
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}

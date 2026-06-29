@@ -188,6 +188,12 @@ pub struct MetadataSearch {
     pub size: u32,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub query: Option<String>,
+    /// Filename substring match (current Immich). Sent alongside `query` for
+    /// older servers that filter filename via the legacy `query` field.
+    #[serde(rename = "originalFileName", skip_serializing_if = "Option::is_none", default)]
+    pub original_file_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub description: Option<String>,
     #[serde(rename = "type", skip_serializing_if = "Option::is_none", default)]
     pub asset_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -206,8 +212,16 @@ pub struct MetadataSearch {
     pub make: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub model: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub city: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub state: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub country: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub person_ids: Vec<String>,
+    #[serde(rename = "tagIds", skip_serializing_if = "Vec::is_empty", default)]
+    pub tag_ids: Vec<String>,
 }
 
 /// EXIF block of `GET /api/assets/{id}`, trimmed to fields shown in the info
@@ -242,15 +256,32 @@ pub struct ExifInfo {
     #[serde(default)]
     pub country: Option<String>,
     #[serde(default)]
-    pub file_size_bytes: Option<i64>,
+    pub file_size_in_byte: Option<i64>,
     #[serde(default)]
     pub description: Option<String>,
     #[serde(default)]
     pub orientation: Option<String>,
     #[serde(default)]
-    pub resolution_x: Option<f64>,
+    pub exif_image_width: Option<i64>,
     #[serde(default)]
-    pub resolution_y: Option<f64>,
+    pub exif_image_height: Option<i64>,
+    #[serde(default)]
+    pub rating: Option<i32>,
+}
+
+/// Deserialize `duration` accepting either Immich shape: the formatted string
+/// ("0:00:12.34500", older servers — even for images) or a millisecond integer
+/// (newer servers), normalized to a String the frontend formats.
+fn duration_string<'de, D>(deserializer: D) -> std::result::Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::Deserialize;
+    Ok(match Option::<serde_json::Value>::deserialize(deserializer)? {
+        None => None,
+        Some(serde_json::Value::String(s)) => Some(s),
+        Some(v) => Some(v.to_string()),
+    })
 }
 
 /// `GET /api/assets/{id}` — full asset detail for the info panel.
@@ -276,6 +307,85 @@ pub struct AssetDetail {
     pub is_favorite: bool,
     #[serde(default)]
     pub live_photo_video_id: Option<String>,
+    #[serde(default)]
+    pub width: Option<i64>,
+    #[serde(default)]
+    pub height: Option<i64>,
+    /// Video/gif duration. Immich ships two shapes — a formatted string on older
+    /// servers ("0:00:12.34500") and a millisecond int on newer ones — so this
+    /// accepts either (see `duration_string`) and the frontend formats it.
+    #[serde(default, deserialize_with = "duration_string")]
+    pub duration: Option<String>,
+    #[serde(default)]
+    pub local_date_time: Option<String>,
+    /// When the asset was originally uploaded to Immich.
+    #[serde(default)]
+    pub created_at: Option<String>,
+    #[serde(default)]
+    pub is_archived: Option<bool>,
+    #[serde(default)]
+    pub is_trashed: Option<bool>,
+    #[serde(default)]
+    pub is_offline: Option<bool>,
+    #[serde(default)]
+    pub tags: Vec<Tag>,
+    #[serde(default)]
+    pub people: Vec<PersonBrief>,
+}
+
+/// A recognized person/face in an asset (for the info panel).
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PersonBrief {
+    pub id: String,
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
+/// A recognized person from `GET /api/people`.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Person {
+    pub id: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub thumbnail_path: Option<String>,
+    #[serde(default)]
+    pub is_hidden: bool,
+    #[serde(default)]
+    pub is_favorite: bool,
+}
+
+/// `GET /api/people` response.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PeopleResponse {
+    #[serde(default)]
+    pub total: i64,
+    #[serde(default)]
+    pub hidden: i64,
+    pub people: Vec<Person>,
+}
+
+/// A geo marker from `GET /api/map/markers`.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct MapMarker {
+    pub id: String,
+    #[serde(default)]
+    pub lat: f64,
+    #[serde(default)]
+    pub lon: f64,
+}
+
+/// A tag from `GET /api/tags` (for the tag filter). `value` is the full
+/// hierarchical path (e.g. "travel/2024"); `name` is the last segment.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct Tag {
+    pub id: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub value: Option<String>,
+    #[serde(default)]
+    pub color: Option<String>,
 }
 
 #[cfg(test)]

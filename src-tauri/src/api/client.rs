@@ -555,8 +555,10 @@ impl ImmichClient {
             .authed(self.http.post(self.url("/api/search/metadata")))
             .json(&body)
             .send()
-            .await?
-            .error_for_status()?;
+            .await?;
+        if !resp.status().is_success() {
+            return Err(api_error(resp).await);
+        }
         Ok(resp.json().await?)
     }
 
@@ -578,8 +580,10 @@ impl ImmichClient {
             .authed(self.http.post(self.url("/api/search/smart")))
             .json(&body)
             .send()
-            .await?
-            .error_for_status()?;
+            .await?;
+        if !resp.status().is_success() {
+            return Err(api_error(resp).await);
+        }
         Ok(resp.json().await?)
     }
 
@@ -589,8 +593,69 @@ impl ImmichClient {
         let resp = self
             .authed(self.http.get(self.url(&path)))
             .send()
-            .await?
-            .error_for_status()?;
+            .await?;
+        if !resp.status().is_success() {
+            return Err(api_error(resp).await);
+        }
+        Ok(resp.json().await?)
+    }
+
+    /// `GET /api/tags` — all tags, for the tag filter.
+    pub async fn tags(&self) -> Result<Vec<Tag>> {
+        let resp = self
+            .authed(self.http.get(self.url("/api/tags")))
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            return Err(api_error(resp).await);
+        }
+        Ok(resp.json().await?)
+    }
+
+    /// `GET /api/people` — all recognized people (for the People browser).
+    pub async fn people(&self) -> Result<PeopleResponse> {
+        let resp = self
+            .authed(self.http.get(self.url("/api/people")))
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            return Err(api_error(resp).await);
+        }
+        Ok(resp.json().await?)
+    }
+
+    /// `GET /api/people/{id}/thumbnail` — a person's face thumbnail (for the
+    /// immichasset scheme `/person/{id}` route).
+    pub async fn person_thumbnail(&self, person_id: &str) -> Result<reqwest::Response> {
+        let path = format!("/api/people/{}/thumbnail", encode_path_segment(person_id));
+        Ok(self
+            .authed(self.http.get(self.url(&path)))
+            .send()
+            .await?)
+    }
+
+    /// `GET /api/search/cities` — one representative asset per city, for the
+    /// Places browser. The city name comes from each asset's `exifInfo.city`.
+    pub async fn cities(&self) -> Result<Vec<AssetDetail>> {
+        let resp = self
+            .authed(self.http.get(self.url("/api/search/cities")))
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            return Err(api_error(resp).await);
+        }
+        Ok(resp.json().await?)
+    }
+
+    /// `GET /api/map/markers` — geo markers for the map view.
+    pub async fn search_map(&self) -> Result<Vec<MapMarker>> {
+        let resp = self
+            .authed(self.http.get(self.url("/api/map/markers")))
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            return Err(api_error(resp).await);
+        }
         Ok(resp.json().await?)
     }
 
@@ -664,6 +729,24 @@ impl ImmichClient {
 /// Encode raw SHA1 bytes as Base64 (for bulk-upload-check).
 pub fn sha1_to_base64(sha1_bytes: &[u8]) -> String {
     base64::engine::general_purpose::STANDARD.encode(sha1_bytes)
+}
+
+/// Build an error from a non-success Immich response, extracting the server's
+/// `message` (Immich's error body is `{ message, error, statusCode }`) so the
+/// UI shows e.g. "Smart search is not enabled" rather than a bare HTTP status.
+async fn api_error(resp: reqwest::Response) -> anyhow::Error {
+    let status = resp.status();
+    let msg = resp
+        .json::<serde_json::Value>()
+        .await
+        .ok()
+        .and_then(|v| {
+            v.get("message")
+                .and_then(|m| m.as_str())
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| format!("HTTP {status}"));
+    anyhow::anyhow!("{msg} (HTTP {status})")
 }
 
 /// Extract the asset list from a `GET /api/albums/{id}` response, tolerating

@@ -145,6 +145,7 @@ function App() {
           </div>
         </header>
 
+        <div className="relative flex flex-1 flex-col overflow-hidden">
         <ActivityBar status={status} />
 
         {removable && (
@@ -184,6 +185,9 @@ function App() {
           {tab === "diagnostics" && <Diagnostics />}
           {tab === "about" && <About />}
         </section>
+
+        <div id="lightbox-root" className="pointer-events-none absolute inset-0 z-[1100]" />
+        </div>
       </main>
     </div>
   );

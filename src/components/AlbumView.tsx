@@ -37,10 +37,12 @@ export function AlbumView({
   album,
   serverUrl,
   onBack,
+  onPersonClick,
 }: {
   album: Album;
   serverUrl: string;
   onBack: () => void;
+  onPersonClick?: (personId: string, name: string) => void;
 }) {
   const [items, setItems] = useState<BrowseAsset[]>([]);
   const [loading, setLoading] = useState(true);
@@ -182,6 +184,7 @@ export function AlbumView({
           asset={active}
           serverUrl={serverUrl}
           onClose={() => setActive(null)}
+          onPersonClick={onPersonClick}
         />
       )}
     </div>

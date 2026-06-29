@@ -145,6 +145,12 @@ pub fn run() {
                                     Ok(resp) => proxy_response(resp).await,
                                     Err(e) => text_response(502, &format!("{e:#}")),
                                 }
+                            } else if let Some(id) = path.strip_prefix("/person/") {
+                                // A person's face thumbnail (People browser).
+                                match client.person_thumbnail(id).await {
+                                    Ok(resp) => proxy_response(resp).await,
+                                    Err(e) => text_response(502, &format!("{e:#}")),
+                                }
                             } else {
                                 // Thumbnail: immichasset://localhost/{id}?size=
                                 let asset_id = path.trim_start_matches('/');
@@ -213,6 +219,10 @@ pub fn run() {
             commands::browse_search,
             commands::browse_smart,
             commands::get_asset_detail,
+            commands::browse_tags,
+            commands::browse_people,
+            commands::browse_cities,
+            commands::browse_map,
             commands::get_local_path,
             commands::browse_album_assets,
             commands::download_asset,
