@@ -29,6 +29,9 @@ const dotIcon = L.divIcon({
   iconAnchor: [12, 12],
 });
 
+// Defense-in-depth for tooltip HTML interpolation — Immich asset ids are UUIDs.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function MapView({
   serverUrl,
   onPersonClick,
@@ -95,14 +98,19 @@ export function MapView({
         }),
     });
     for (const m of markers) {
-      L.marker([m.lat, m.lon], { icon: dotIcon })
+      const marker = L.marker([m.lat, m.lon], { icon: dotIcon })
         .addTo(cluster)
-        .bindTooltip(
+        .on("click", () => void openAsset(m.id));
+      // Only build the tooltip HTML if the id is a valid UUID. assetUrl()
+      // already encodeURIComponent's the id, but this prevents XSS if that
+      // encoding is ever dropped or a non-UUID id slips through.
+      if (UUID_RE.test(m.id)) {
+        marker.bindTooltip(
           `<img src="${assetUrl(m.id, "thumbnail")}" class="immich-map-preview-img" ` +
             `width="160" height="160" alt="" />`,
           { direction: "top", opacity: 1, offset: [0, -8] },
-        )
-        .on("click", () => void openAsset(m.id));
+        );
+      }
     }
     cluster.addTo(map);
     clusterRef.current = cluster;
