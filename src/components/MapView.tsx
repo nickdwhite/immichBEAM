@@ -131,7 +131,6 @@ export function MapView({
         originalFileName: d.originalFileName ?? null,
         originalMimeType: d.originalMimeType ?? null,
         fileCreatedAt: d.fileCreatedAt ?? d.localDateTime ?? null,
-        thumbhash: null,
         duration: d.duration ?? null,
         isFavorite: d.isFavorite ?? false,
         livePhotoVideoId: d.livePhotoVideoId ?? null,

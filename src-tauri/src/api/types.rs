@@ -144,9 +144,6 @@ pub struct BrowseAsset {
     pub original_mime_type: Option<String>,
     #[serde(rename = "fileCreatedAt", default)]
     pub file_created_at: Option<String>,
-    /// Base64-encoded placeholder rendered behind a tile while its thumbnail loads.
-    #[serde(default)]
-    pub thumbhash: Option<String>,
     /// Video duration string, e.g. "0:00:12.34500" (absent for images).
     #[serde(default)]
     pub duration: Option<String>,

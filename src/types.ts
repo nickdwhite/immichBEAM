@@ -194,7 +194,6 @@ export interface BrowseAsset {
   originalFileName: string | null;
   originalMimeType: string | null;
   fileCreatedAt: string | null;
-  thumbhash: string | null;
   duration: string | null;
   isFavorite: boolean;
   livePhotoVideoId: string | null;
