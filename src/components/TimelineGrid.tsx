@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Archive,
   Calendar,
@@ -11,10 +11,12 @@ import {
   Video,
 } from "lucide-react";
 import { DEFAULT_FILTERS, useBrowse, type BrowseFilters, type BrowseMode } from "../hooks/useBrowse";
+import { useInfiniteScroll } from "../hooks/useInfiniteScroll";
 import { api } from "../lib/tauri";
 import { PhotoTile } from "./PhotoTile";
 import { PhotoLightbox } from "./PhotoLightbox";
 import { RangeCalendar } from "./RangeCalendar";
+import { VirtualGrid } from "./VirtualGrid";
 import type { BrowseAsset, Tag } from "../types";
 
 type TypeFilter = BrowseFilters["type"];
@@ -67,7 +69,7 @@ export function TimelineGrid({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [active, setActive] = useState<BrowseAsset | null>(null);
   const { items, loading, error, hasMore, loadMore } = useBrowse(filters, mode);
-  const sentinel = useRef<HTMLDivElement>(null);
+  const sentinel = useInfiniteScroll(loadMore, hasMore);
 
   const [tags, setTags] = useState<Tag[]>(_tagsCache ?? []);
   useEffect(() => {
@@ -79,19 +81,6 @@ export function TimelineGrid({
       })
       .catch(() => {});
   }, []);
-
-  useEffect(() => {
-    const el = sentinel.current;
-    if (!el || !hasMore) return;
-    const obs = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) void loadMore();
-      },
-      { rootMargin: "300px" },
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [hasMore, loadMore]);
 
   const set = <K extends keyof BrowseFilters>(
     key: K,
@@ -273,11 +262,11 @@ export function TimelineGrid({
             : "No photos match."}
         </p>
       ) : (
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
-          {items.map((a) => (
-            <PhotoTile key={a.id} asset={a} onClick={() => setActive(a)} />
-          ))}
-        </div>
+        <VirtualGrid
+          items={items}
+          getKey={(a) => a.id}
+          renderItem={(a) => <PhotoTile asset={a} onClick={() => setActive(a)} />}
+        />
       )}
 
       <div ref={sentinel} className="h-1" />

@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { useAssetSearch } from "../hooks/useAssetSearch";
+import { useInfiniteScroll } from "../hooks/useInfiniteScroll";
 import { PhotoTile } from "./PhotoTile";
 import { PhotoLightbox } from "./PhotoLightbox";
+import { VirtualGrid } from "./VirtualGrid";
 import type { BrowseAsset, MetadataSearch } from "../types";
 
 export function AssetResults({
@@ -20,20 +22,7 @@ export function AssetResults({
 }) {
   const { items, loading, error, hasMore, loadMore } = useAssetSearch(search);
   const [active, setActive] = useState<BrowseAsset | null>(null);
-  const sentinel = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = sentinel.current;
-    if (!el || !hasMore) return;
-    const obs = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) void loadMore();
-      },
-      { rootMargin: "300px" },
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [hasMore, loadMore]);
+  const sentinel = useInfiniteScroll(loadMore, hasMore);
 
   return (
     <div className="space-y-3">
@@ -61,11 +50,11 @@ export function AssetResults({
           No photos found.
         </p>
       ) : (
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
-          {items.map((a) => (
-            <PhotoTile key={a.id} asset={a} onClick={() => setActive(a)} />
-          ))}
-        </div>
+        <VirtualGrid
+          items={items}
+          getKey={(a) => a.id}
+          renderItem={(a) => <PhotoTile asset={a} onClick={() => setActive(a)} />}
+        />
       )}
 
       <div ref={sentinel} className="h-1" />

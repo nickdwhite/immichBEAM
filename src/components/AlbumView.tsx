@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   Image as ImageIcon,
@@ -10,6 +10,7 @@ import {
 import { api } from "../lib/tauri";
 import { PhotoTile } from "./PhotoTile";
 import { PhotoLightbox } from "./PhotoLightbox";
+import { VirtualGrid } from "./VirtualGrid";
 import type { Album, BrowseAsset } from "../types";
 
 type TypeFilter = "all" | "IMAGE" | "VIDEO";
@@ -51,8 +52,6 @@ export function AlbumView({
   const [query, setQuery] = useState("");
   const [type, setType] = useState<TypeFilter>("all");
   const [ext, setExt] = useState<string>("all");
-  const [visibleCount, setVisibleCount] = useState(60);
-  const sentinel = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,24 +95,6 @@ export function AlbumView({
   }, [items, query, type, ext]);
 
   const filtering = query !== "" || type !== "all" || ext !== "all";
-
-  // Reset render-pagination when filters change.
-  useEffect(() => setVisibleCount(60), [query, type, ext]);
-
-  // Auto-load more tiles as the sentinel scrolls into view.
-  const hasMore = filtered.length > visibleCount;
-  useEffect(() => {
-    const el = sentinel.current;
-    if (!el || !hasMore) return;
-    const obs = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) setVisibleCount((n) => n + 60);
-      },
-      { rootMargin: "300px" },
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [hasMore]);
 
   return (
     <div className="space-y-3">
@@ -192,19 +173,11 @@ export function AlbumView({
             : "No items match your filter."}
         </p>
       ) : (
-        <>
-          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
-            {filtered.slice(0, visibleCount).map((a) => (
-              <PhotoTile key={a.id} asset={a} onClick={() => setActive(a)} />
-            ))}
-          </div>
-          {hasMore && (
-            <div className="flex justify-center py-4">
-              <Loader2 className="animate-spin text-brand-500" size={20} />
-            </div>
-          )}
-          {hasMore && <div ref={sentinel} className="h-1" />}
-        </>
+        <VirtualGrid
+          items={filtered}
+          getKey={(a) => a.id}
+          renderItem={(a) => <PhotoTile asset={a} onClick={() => setActive(a)} />}
+        />
       )}
 
       {active && (
