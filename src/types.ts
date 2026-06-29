@@ -217,6 +217,7 @@ export interface MetadataSearch {
   isFavorite?: boolean;
   isArchived?: boolean;
   isTrashed?: boolean;
+  visibility?: string;
   isNotInAlbum?: boolean;
   takenAfter?: string;
   takenBefore?: string;

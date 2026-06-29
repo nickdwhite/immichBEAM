@@ -57,6 +57,8 @@ export function useBrowse(filters: BrowseFilters, mode: BrowseMode) {
         type: filters.type === "all" ? undefined : filters.type,
         isFavorite: filters.isFavorite || undefined,
         isArchived: filters.isArchived || undefined,
+        // v3 compat: visibility replaces isArchived; send both for v2+v3.
+        visibility: filters.isArchived ? "archive" : undefined,
         isNotInAlbum: filters.isNotInAlbum || undefined,
         takenAfter: filters.takenAfter || undefined,
         takenBefore: filters.takenBefore || undefined,

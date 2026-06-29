@@ -202,6 +202,12 @@ pub struct MetadataSearch {
     pub is_archived: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub is_trashed: Option<bool>,
+    /// Immich v3 replaced isArchived/isTrashed with a single `visibility` enum
+    /// ("timeline" | "archive" | "trash" | "locked"). Sent alongside the
+    /// legacy isArchived/isTrashed for v2 backward compatibility — v3 servers
+    /// strip the unknown legacy keys, v2 servers strip this.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub visibility: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub is_not_in_album: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
