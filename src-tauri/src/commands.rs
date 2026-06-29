@@ -591,7 +591,8 @@ pub async fn browse_album_assets(
 }
 
 /// `GET /api/assets/{id}/original` — stream the original to a destination path
-/// chosen via the frontend save dialog.
+/// chosen via the frontend save dialog. The destination is validated to be
+/// within the user's home directory as a defense against path traversal.
 #[tauri::command]
 pub async fn download_asset(
     engine: State<'_, SyncEngine>,
@@ -600,6 +601,19 @@ pub async fn download_asset(
 ) -> CmdResult<()> {
     use futures::StreamExt;
     use tokio::io::AsyncWriteExt;
+
+    // Security: validate the destination resolves under the user's home
+    // directory. Prevents a compromised webview from writing to system paths
+    // (e.g. ~/.ssh/authorized_keys) via this command.
+    let dest = std::path::Path::new(&destination);
+    let home = dirs::home_dir().ok_or("could not resolve home directory")?;
+    let canonical_home = home.canonicalize().unwrap_or(home);
+    let parent = dest.parent().unwrap_or(std::path::Path::new("."));
+    let canonical_parent = std::fs::canonicalize(parent)
+        .map_err(|e| format!("invalid destination directory: {e}"))?;
+    if !canonical_parent.starts_with(&canonical_home) {
+        return Err("destination must be within your home directory".into());
+    }
 
     let client = engine.client().await.ok_or("Not connected to a server")?;
     let resp = client.download_asset(&asset_id).await.map_err(map_err)?;
