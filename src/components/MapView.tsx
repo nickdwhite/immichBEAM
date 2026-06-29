@@ -48,7 +48,12 @@ export function MapView({
   const [active, setActive] = useState<BrowseAsset | null>(null);
 
   useEffect(() => {
-    api.browseMap().then(setMarkers).catch((e) => setError(String(e)));
+    let cancelled = false;
+    api
+      .browseMap()
+      .then((m) => { if (!cancelled) setMarkers(m); })
+      .catch((e) => { if (!cancelled) setError(String(e)); });
+    return () => { cancelled = true; };
   }, []);
 
   // Initialize the map once. No Leaflet prefix in the attribution (the required

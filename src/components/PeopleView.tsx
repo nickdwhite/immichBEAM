@@ -9,7 +9,12 @@ export function PeopleView({ onOpen }: { onOpen: (person: Person) => void }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.browsePeople().then(setPeople).catch((e) => setError(String(e)));
+    let cancelled = false;
+    api
+      .browsePeople()
+      .then((p) => { if (!cancelled) setPeople(p); })
+      .catch((e) => { if (!cancelled) setError(String(e)); });
+    return () => { cancelled = true; };
   }, []);
 
   if (error) {

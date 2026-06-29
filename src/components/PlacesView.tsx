@@ -9,7 +9,12 @@ export function PlacesView({ onOpen }: { onOpen: (city: string) => void }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.browseCities().then(setPlaces).catch((e) => setError(String(e)));
+    let cancelled = false;
+    api
+      .browseCities()
+      .then((c) => { if (!cancelled) setPlaces(c); })
+      .catch((e) => { if (!cancelled) setError(String(e)); });
+    return () => { cancelled = true; };
   }, []);
 
   if (error) {

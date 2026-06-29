@@ -1,13 +1,18 @@
-import { useState } from "react";
-import { Images, LayoutGrid, Map as MapIcon, MapPin, Users } from "lucide-react";
+import { lazy, Suspense, useState } from "react";
+import { Images, LayoutGrid, Loader2, Map as MapIcon, MapPin, Users } from "lucide-react";
 import { isServerConfigured } from "../lib/config";
 import { TimelineGrid } from "./TimelineGrid";
 import { AlbumList } from "./AlbumList";
 import { AlbumView } from "./AlbumView";
 import { PeopleView } from "./PeopleView";
 import { PlacesView } from "./PlacesView";
-import { MapView } from "./MapView";
 import { AssetResults } from "./AssetResults";
+
+// Lazy-load MapView (pulls in Leaflet + markercluster — ~227 KB) so it only
+// loads when the user opens the Map tab, not on initial app load.
+const MapView = lazy(() =>
+  import("./MapView").then((m) => ({ default: m.MapView })),
+);
 import type { Album, ConfigDto, MetadataSearch, Person } from "../types";
 
 type Mode = "timeline" | "albums" | "people" | "places" | "map";
@@ -108,10 +113,18 @@ export function PhotoBrowser({ config }: { config: ConfigDto }) {
       ) : mode === "places" ? (
         <PlacesView onOpen={openPlace} />
       ) : (
-        <MapView
-          serverUrl={config.server_url}
-          onPersonClick={handlePersonClick}
-        />
+        <Suspense
+          fallback={
+            <div className="flex justify-center py-10">
+              <Loader2 className="animate-spin text-brand-500" size={20} />
+            </div>
+          }
+        >
+          <MapView
+            serverUrl={config.server_url}
+            onPersonClick={handlePersonClick}
+          />
+        </Suspense>
       )}
     </div>
   );

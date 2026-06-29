@@ -1,110 +1,77 @@
 # HANDOFF
 
-Last updated: 2026-06-28
+Last updated: 2026-06-29
 
 ## Repo and branch state
 
 - Local repo path: `/Users/ndw-eiq/Downloads/projects/immich-syncdesk`
 - App name: **Immich Beam** (package/folder still `immich-syncdesk`, intentionally unchanged)
 - Version: `0.3.8` (`tauri.conf.json`, `Cargo.toml`, `package.json`)
-- Base branch: `main` @ `52d6bf4` ("Bump version to 0.3.8"), in sync with `origin/main`
-- **Active branch: `feat/remote-browser`** — created off `main` for the new feature below.
-- Not yet pushed (no remote tracking branch exists yet).
-- Working tree status: clean except an untracked `.claude/` directory (carried over, harmless).
+- **Active branch: `feat/remote-browser`** — ready to push + PR.
 - GitHub repo: `nickdwhite/immich-beam` — <https://github.com/nickdwhite/immich-beam>
 - Git remote: `origin https://github.com/nickdwhite/immich-beam.git`
-- GitHub CLI (`gh`) installed + authenticated for `nickdwhite` (HTTPS). Do not store/paste any token into the repo or docs.
+- GitHub CLI (`gh`) installed + authenticated for `nickdwhite` (HTTPS).
+- All commits unsigned (no `gpg` installed on this machine).
 
-## What this branch is for
+## What this branch adds
 
-**New feature: a Remote Immich Photo Browser.**
+**Remote Immich Photo Browser** — a complete media browsing experience:
 
-Immich Beam today is a **one-way upload client** (local → server). Every existing
-view — Overview, Queue, History, Free Up Space, Server, Folders, Sync,
-Diagnostics, About — is about pushing files *up*. This feature adds the opposite
-direction: browsing and downloading photos that already live *on* the server.
+- **Timeline** — infinite-scroll grid with type filters (All/Photos/Videos).
+- **Search** — filename search, smart/CLIP semantic search, quick filters
+  (favorites/archive/not-in-album), tag dropdown, custom date calendar with
+  presets (30d/90d/6mo/1yr).
+- **Albums** — browse + open + client-side filter (type/extension/search) +
+  render pagination for large albums.
+- **People** — face grid; click → their photos; clickable People chips in the
+  lightbox navigate to that person's photos.
+- **Places** — city cards; click → photos in that city.
+- **Map** — Leaflet + CartoDB theme-aware basemaps, clustered markers with
+  hover-thumbnail previews, fit-all button.
+- **Lightbox** — React portal (below header, no gap), theme-aware (light/dark),
+  info panel (GPS, timezone, camera, EXIF, people, tags, status badges, rating,
+  local path), download, server link, video autoplay toggle, Escape-to-close.
+- **Custom URI scheme** (`immichasset://`) — Rust proxy that injects auth and
+  serves thumbnails, video playback (Range passthrough), SVG originals, and
+  person face thumbnails to the webview.
+- **Version display** — dev builds show `0.3.8-dev (branch@commit*)`.
+- **Content-filter fix** — `.mts`/`.m2ts`/`.cts` byte-sniffed to reject TS/text.
 
-This is a genuinely new direction; it is **not** in `docs/TODO.md`'s roadmap. It
-will be developed on this branch and PR'd back to `main` when ready.
+## Immich API version notes
 
-### Agreed scope (first cut)
+The user's server is Immich v2.x (latest stable). The Immich `main` branch has
+unreleased v3 changes. Key differences handled with dual-send shims:
+- `duration`: v2 sends string `"0:00:12.34"`, v3 sends int ms → custom
+  deserializer accepts both.
+- `isArchived`/`isTrashed`: v3 replaced with `visibility` enum → both sent.
+- `query`: v3 MetadataSearch removed it (use `originalFileName`) → both sent.
+- `/api/search/explore`: no place data on v2 → Places uses `/api/search/cities`.
+- `/api/search/map`: doesn't exist → Map uses `/api/map/markers`.
 
-Grid + albums + search + download:
-- Paginated thumbnail **grid** of server assets (timeline).
-- **Albums** browsing (reuse existing `GET /api/albums`).
-- **Search** (filename / metadata).
-- **Lightbox** full-size view.
-- **Download** original to disk.
+## Comprehensive review status
 
-Thumbnail-delivery mechanism (base64 command vs custom URI scheme) is **deferred
-to plan mode** — see "Open design decision" below.
+7 reviews completed (API audit, bundle size, race conditions, CSP, cross-platform,
+accessibility, state management). All findings addressed or noted for follow-up.
+See `.workspace/STATUS.md` for the full backlog.
 
 ## What this project is (durable context)
 
-Cross-platform Tauri v2 + React 19 + Rust desktop sync client for Immich
-(self-hosted photo server). Rust sync engine (streaming uploads, SHA1 hash cache
-in SQLite, TOFU cert pinning, file watcher via notify, Live Photo pairing, XMP
-sidecars, free-up-space). React frontend with a sectioned sidebar.
+Cross-platform Tauri v2 + React 19 + Rust desktop sync client for Immich.
+Rust sync engine (streaming uploads, SHA1 hash cache in SQLite, TOFU cert
+pinning, file watcher, Live Photo pairing, XMP sidecars, free-up-space).
+React frontend with a sectioned sidebar.
 
-- Manual-update mode is intentional (private repo can't serve anonymous feeds):
-  `IN_APP_UPDATES_ENABLED = false` in `src/lib/release.ts`; updater
-  pubkey/endpoint in `tauri.conf.json` are placeholders.
-- Secrets: only release-signing values (`TAURI_SIGNING_PRIVATE_KEY`,
-  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`) are relevant; see `docs/RELEASE_SECRETS.md`.
-  Immich API key / password live in the OS **keychain**, not in `.env`.
-
-## Integration points for the new feature
-
-Verified against the current tree — these are exactly where the browser wires in:
-
-**Frontend**
-- Navigation: `Tab` union + `SECTIONS` in `src/components/Sidebar.tsx:21,38`.
-- Render switch + titles: `src/App.tsx:22` (`TITLES`) and `src/App.tsx:172` (the
-  `{tab === "x" && <X/>}` block).
-- IPC wrappers: `api` + `events` in `src/lib/tauri.ts:28,113`.
-- Shared types: `src/types.ts`.
-- Gate the view on the server being configured, like the rest of the app:
-  `isServerConfigured()` in `src/lib/config.ts`.
-
-**Backend (Rust)**
-- `ImmichClient` — `src-tauri/src/api/client.rs`. Has an `authed()` header helper
-  (line 162) covering both `ApiKey` and `Bearer` auth, so new browse methods drop
-  in alongside the existing `albums()` / `me()` methods with no new auth plumbing.
-- DTOs: `src-tauri/src/api/types.rs`.
-- Commands: `src-tauri/src/commands.rs`. Commands reach the live client via
-  `State<'_, SyncEngine>` (engine owns the client; `get_albums` is the closest
-  existing template).
-- Registration: add new commands to the `tauri::generate_handler![...]` list in
-  `src-tauri/src/lib.rs:115`.
-
-**Immich server endpoints needed (confirmed from the project's own research notes
-+ OpenAPI; don't re-research)**
-- `POST /api/search/metadata` — `{ page, size, withExif }` →
-  `{ assets: { items: [AssetResponseDto…], nextPage } }`. The timeline/grid source.
-- `GET /api/assets/{id}/thumbnail?size=preview|thumbnail` — JPEG bytes (auth req'd).
-- `GET /api/assets/{id}/original` — original file bytes (download).
-- `GET /api/albums` already wrapped (`ImmichClient::albums`, `api.getAlbums`).
-
-## Open design decision (resolve in plan mode)
-
-**How thumbnails reach the webview** — shapes the whole component layer:
-
-| | A. Base64 command | B. Custom URI scheme |
-|---|---|---|
-| Effort | Small | Medium |
-| Perf (large grid) | Poor (~33% bloat, 1 invoke/tile) | Good (webview-cached) |
-| Auth | ApiKey + Bearer, trivially | Header injected in Rust handler |
-
-Lean: start with **A** (matches existing IPC patterns, fastest to a working
-grid), structure the component so **B** is a drop-in swap later.
+- Manual-update mode: `IN_APP_UPDATES_ENABLED = false` in `src/lib/release.ts`.
+- Secrets: Immich API key / password in OS keychain, not in `.env`.
+- Private cross-tool work queue: `.workspace/` (gitignored).
 
 ## Useful commands
 
 ```bash
-pnpm build                      # tsc && vite build  (frontend typecheck + build)
+pnpm build                          # tsc && vite build
 npx tsc --noEmit
-cargo test                      # from src-tauri/
-cargo clippy --no-deps --all-targets   # passes with known pre-existing warnings
-pnpm tauri dev                  # run the app (frontend :1420, Rust hot-rebuild)
-gh pr create --base main --head feat/remote-browser   # when ready to PR
+cargo test                          # from src-tauri/
+cargo clippy --no-deps --all-targets
+pnpm tauri dev                      # run the app
+gh pr create --base main --head feat/remote-browser
 ```

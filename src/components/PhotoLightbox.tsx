@@ -133,6 +133,15 @@ export function PhotoLightbox({
     };
   }, [asset.id]);
 
+  // Close on Escape key.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   const download = async () => {
     setDownloading(true);
     try {
@@ -199,6 +208,9 @@ export function PhotoLightbox({
     // defines the position. pointer-events-auto re-enables interaction.
     <div
       className="pointer-events-auto absolute inset-0 z-[1100] flex flex-col bg-slate-100 dark:bg-slate-950"
+      role="dialog"
+      aria-modal="true"
+      aria-label={asset.originalFileName ?? "Photo viewer"}
       onClick={onClose}
     >
       <div
@@ -248,7 +260,7 @@ export function PhotoLightbox({
               <ExternalLink size={15} /> Server
             </button>
           )}
-          <button onClick={onClose} aria-label="Close" className={closeCls}>
+          <button autoFocus onClick={onClose} aria-label="Close" className={closeCls}>
             <X size={18} />
           </button>
         </div>
