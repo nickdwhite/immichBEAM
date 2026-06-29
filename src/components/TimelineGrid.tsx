@@ -52,6 +52,9 @@ const presetChip = (active: boolean): string =>
       : "bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
   }`;
 
+// Module-level cache — tags rarely change; fetched once per session.
+let _tagsCache: Tag[] | null = null;
+
 export function TimelineGrid({
   serverUrl,
   onPersonClick,
@@ -66,9 +69,15 @@ export function TimelineGrid({
   const { items, loading, error, hasMore, loadMore } = useBrowse(filters, mode);
   const sentinel = useRef<HTMLDivElement>(null);
 
-  const [tags, setTags] = useState<Tag[]>([]);
+  const [tags, setTags] = useState<Tag[]>(_tagsCache ?? []);
   useEffect(() => {
-    api.browseTags().then(setTags).catch(() => {});
+    if (_tagsCache) return;
+    api.browseTags()
+      .then((t) => {
+        _tagsCache = t;
+        setTags(t);
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
