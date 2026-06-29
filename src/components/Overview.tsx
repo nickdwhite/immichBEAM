@@ -1,6 +1,8 @@
 import {
   CheckCircle2,
+  ChevronRight,
   Copy,
+  Images,
   ListChecks,
   Pause,
   Play,
@@ -90,6 +92,30 @@ export function Overview({
           </button>
         </div>
       </div>
+
+      {config.server_url && (
+        <div className="flex items-center justify-between rounded-xl border border-brand-200 bg-brand-50 p-4 dark:border-brand-900 dark:bg-brand-900/20">
+          <div className="flex items-center gap-3">
+            <div className="inline-flex rounded-lg bg-brand-100 p-2 text-brand-600 dark:bg-brand-900/50 dark:text-brand-300">
+              <Images size={18} />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-brand-800 dark:text-brand-200">
+                Browse your library
+              </p>
+              <p className="text-xs text-brand-600/80 dark:text-brand-300/80">
+                View and download photos stored on your Immich server.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => onNavigate("browse")}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-brand-700"
+          >
+            Browse <ChevronRight size={15} />
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatCard

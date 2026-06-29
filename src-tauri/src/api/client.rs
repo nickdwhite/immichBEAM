@@ -534,11 +534,242 @@ impl ImmichClient {
             .error_for_status()?;
         Ok(())
     }
+
+    /// `POST /api/search/metadata` — one page of the asset timeline/grid.
+    /// `asset_type` filters to `"IMAGE"` or `"VIDEO"` (None = both). `size` is
+    /// clamped to the server max of 1000.
+    /// `POST /api/search/metadata` — one page of the asset timeline/grid, with
+    /// the full filter set (text query, type, favorite/archive/trash/not-in-
+    /// album, date range, camera make/model, people). `size` is clamped to the
+    /// server max of 1000 and EXIF is omitted (not needed for the grid listing).
+    pub async fn search_assets(
+        &self,
+        search: &MetadataSearch,
+    ) -> Result<MetadataSearchResponse> {
+        let mut body = serde_json::to_value(search)?;
+        if let Some(obj) = body.as_object_mut() {
+            obj.insert("size".into(), serde_json::json!(search.size.min(1000)));
+            obj.insert("withExif".into(), false.into());
+        }
+        let resp = self
+            .authed(self.http.post(self.url("/api/search/metadata")))
+            .json(&body)
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            return Err(api_error(resp).await);
+        }
+        Ok(resp.json().await?)
+    }
+
+    /// `POST /api/search/smart` — CLIP semantic search (needs machine-learning
+    /// enabled on the server). Returns the same shape as metadata search.
+    pub async fn smart_search(
+        &self,
+        query: &str,
+        page: u32,
+        size: u32,
+    ) -> Result<MetadataSearchResponse> {
+        let body = serde_json::json!({
+            "query": query,
+            "page": page,
+            "size": size.min(1000),
+            "withExif": false,
+        });
+        let resp = self
+            .authed(self.http.post(self.url("/api/search/smart")))
+            .json(&body)
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            return Err(api_error(resp).await);
+        }
+        Ok(resp.json().await?)
+    }
+
+    /// `GET /api/assets/{id}` — full asset detail (incl. EXIF) for the info panel.
+    pub async fn asset_detail(&self, asset_id: &str) -> Result<AssetDetail> {
+        let path = format!("/api/assets/{}", encode_path_segment(asset_id));
+        let resp = self
+            .authed(self.http.get(self.url(&path)))
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            return Err(api_error(resp).await);
+        }
+        Ok(resp.json().await?)
+    }
+
+    /// `GET /api/tags` — all tags, for the tag filter.
+    pub async fn tags(&self) -> Result<Vec<Tag>> {
+        let resp = self
+            .authed(self.http.get(self.url("/api/tags")))
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            return Err(api_error(resp).await);
+        }
+        Ok(resp.json().await?)
+    }
+
+    /// `GET /api/people` — all recognized people (for the People browser).
+    pub async fn people(&self) -> Result<PeopleResponse> {
+        let resp = self
+            .authed(self.http.get(self.url("/api/people")))
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            return Err(api_error(resp).await);
+        }
+        Ok(resp.json().await?)
+    }
+
+    /// `GET /api/people/{id}/thumbnail` — a person's face thumbnail (for the
+    /// immichasset scheme `/person/{id}` route).
+    pub async fn person_thumbnail(&self, person_id: &str) -> Result<reqwest::Response> {
+        let path = format!("/api/people/{}/thumbnail", encode_path_segment(person_id));
+        Ok(self
+            .authed(self.http.get(self.url(&path)))
+            .send()
+            .await?)
+    }
+
+    /// `GET /api/search/cities` — one representative asset per city, for the
+    /// Places browser. The city name comes from each asset's `exifInfo.city`.
+    pub async fn cities(&self) -> Result<Vec<AssetDetail>> {
+        let resp = self
+            .authed(self.http.get(self.url("/api/search/cities")))
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            return Err(api_error(resp).await);
+        }
+        Ok(resp.json().await?)
+    }
+
+    /// `GET /api/map/markers` — geo markers for the map view.
+    pub async fn search_map(&self) -> Result<Vec<MapMarker>> {
+        let resp = self
+            .authed(self.http.get(self.url("/api/map/markers")))
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            return Err(api_error(resp).await);
+        }
+        Ok(resp.json().await?)
+    }
+
+    /// `GET /api/assets/{id}/thumbnail?size=` — the upstream response, so the
+    /// caller can read the Content-Type Immich actually returned (webp/jpeg, and
+    /// occasionally the original for formats Immich doesn't transcode) before
+    /// pulling the bytes. `size` is `"thumbnail"`, `"preview"`, or `"full"`.
+    pub async fn thumbnail(&self, asset_id: &str, size: &str) -> Result<reqwest::Response> {
+        let path = format!(
+            "/api/assets/{}/thumbnail?size={}",
+            encode_path_segment(asset_id),
+            encode_path_segment(size),
+        );
+        Ok(self
+            .authed(self.http.get(self.url(&path)))
+            .send()
+            .await?
+            .error_for_status()?)
+    }
+
+    /// `GET /api/albums/{id}` — the assets in an album, for "open album".
+    ///
+    /// Parsed defensively because Immich has shipped two shapes for an album's
+    /// `assets` field: a wrapped `SearchAssetResponseDto`
+    /// (`{ total, count, items, nextPage }`) on current servers, and a flat
+    /// `AssetResponseDto[]` on older ones. Both are handled.
+    pub async fn album_assets(&self, album_id: &str) -> Result<Vec<BrowseAsset>> {
+        let path = format!("/api/albums/{}", encode_path_segment(album_id));
+        let resp = self
+            .authed(self.http.get(self.url(&path)))
+            .send()
+            .await?
+            .error_for_status()?;
+        let body: serde_json::Value = resp.json().await?;
+        Ok(album_asset_items(&body))
+    }
+
+    /// `GET /api/assets/{id}/original` — streaming download response; the
+    /// caller streams the body to the destination file.
+    pub async fn download_asset(&self, asset_id: &str) -> Result<reqwest::Response> {
+        let path = format!("/api/assets/{}/original", encode_path_segment(asset_id));
+        Ok(self
+            .authed(self.http.get(self.url(&path)))
+            .send()
+            .await?
+            .error_for_status()?)
+    }
+
+    /// `GET /api/assets/{id}/video/playback` — the play-ready (transcoded)
+    /// stream for inline `<video>` playback. The optional Range header is
+    /// forwarded so the webview can seek efficiently; 206 Partial Content and
+    /// 200 (full) are both accepted.
+    pub async fn video_playback(
+        &self,
+        asset_id: &str,
+        range: Option<&str>,
+    ) -> Result<reqwest::Response> {
+        let path = format!("/api/assets/{}/video/playback", encode_path_segment(asset_id));
+        let mut req = self.authed(self.http.get(self.url(&path)));
+        if let Some(r) = range {
+            req = req.header("range", r);
+        }
+        let resp = req.send().await?;
+        if !resp.status().is_success() {
+            return Err(anyhow!("video playback failed: HTTP {}", resp.status()));
+        }
+        Ok(resp)
+    }
 }
 
 /// Encode raw SHA1 bytes as Base64 (for bulk-upload-check).
 pub fn sha1_to_base64(sha1_bytes: &[u8]) -> String {
     base64::engine::general_purpose::STANDARD.encode(sha1_bytes)
+}
+
+/// Build an error from a non-success Immich response, extracting the server's
+/// `message` (Immich's error body is `{ message, error, statusCode }`) so the
+/// UI shows e.g. "Smart search is not enabled" rather than a bare HTTP status.
+async fn api_error(resp: reqwest::Response) -> anyhow::Error {
+    let status = resp.status();
+    let msg = resp
+        .json::<serde_json::Value>()
+        .await
+        .ok()
+        .and_then(|v| {
+            v.get("message")
+                .and_then(|m| m.as_str())
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| format!("HTTP {status}"));
+    anyhow::anyhow!("{msg} (HTTP {status})")
+}
+
+/// Extract the asset list from a `GET /api/albums/{id}` response, tolerating
+/// both Immich shapes for the `assets` field: a wrapped
+/// `SearchAssetResponseDto` (`{ total, count, items, nextPage }`) on current
+/// servers, or a flat `AssetResponseDto[]` on older ones.
+fn album_asset_items(album: &serde_json::Value) -> Vec<BrowseAsset> {
+    let Some(assets) = album.get("assets") else {
+        return Vec::new();
+    };
+    let items = match assets {
+        serde_json::Value::Array(_) => assets,
+        serde_json::Value::Object(_) => assets.get("items").unwrap_or(&serde_json::Value::Null),
+        _ => return Vec::new(),
+    };
+    items
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| serde_json::from_value::<BrowseAsset>(v.clone()).ok())
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// True if the host in `base_url` is an IP literal (v4 or v6). Used to decide
@@ -597,6 +828,42 @@ mod tests {
         assert_eq!(encode_path_segment("a/b"), "a%2Fb");
         assert_eq!(encode_path_segment("../x"), "..%2Fx");
         assert_eq!(encode_path_segment("a b?c#d"), "a%20b%3Fc%23d");
+    }
+
+    #[test]
+    fn album_asset_items_handles_both_shapes() {
+        // Wrapped shape ({ assets: { total, count, items, nextPage } }) — current servers.
+        let wrapped = serde_json::json!({
+            "albumName": "Trip",
+            "assets": {
+                "total": 2,
+                "count": 2,
+                "items": [
+                    {"id": "a1", "type": "IMAGE"},
+                    {"id": "a2", "type": "VIDEO"}
+                ],
+                "nextPage": null
+            }
+        });
+        let items = album_asset_items(&wrapped);
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].id, "a1");
+        assert_eq!(items[1].asset_type, "VIDEO");
+
+        // Flat array shape ({ assets: [...] }) — older servers.
+        let flat = serde_json::json!({
+            "albumName": "Old",
+            "assets": [
+                {"id": "b1", "type": "IMAGE"},
+                {"id": "b2", "type": "IMAGE"}
+            ]
+        });
+        let items = album_asset_items(&flat);
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[1].id, "b2");
+
+        // Missing assets → empty.
+        assert!(album_asset_items(&serde_json::json!({"albumName": "Empty"})).is_empty());
     }
 }
 

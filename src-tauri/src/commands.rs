@@ -3,7 +3,10 @@
 use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
-use crate::api::{Album, ConnectionInfo, ImmichClient, ServerFeatures};
+use crate::api::{
+    Album, AssetDetail, BrowseAsset, ConnectionInfo, ImmichClient, MapMarker, MetadataSearch,
+    Person, ServerFeatures, Tag,
+};
 use crate::config::{AppConfig, WatchedFolder};
 use crate::db::{HistoryItem, QueueItem};
 use crate::keychain;
@@ -32,6 +35,14 @@ pub async fn get_config(engine: State<'_, SyncEngine>) -> CmdResult<ConfigDto> {
         config,
         has_api_key,
     })
+}
+
+/// Human-readable version for the window title, sidebar, and About tab: the
+/// package semver, plus — in dev builds only — the git branch, short commit,
+/// and a `*` if the tree is dirty.
+#[tauri::command]
+pub fn get_version_display() -> String {
+    crate::version_display()
 }
 
 /// Validate a server URL + API key without persisting anything.
@@ -447,6 +458,175 @@ pub async fn reorganize_albums(
     engine: State<'_, SyncEngine>,
 ) -> CmdResult<crate::sync::cleanup::ReorganizeResult> {
     Ok(engine.reorganize_albums().await)
+}
+
+// ---- Remote browser (download direction) -------------------------------
+
+/// One page of browser results, shaped for the frontend.
+#[derive(Serialize)]
+pub struct BrowsePage {
+    pub items: Vec<BrowseAsset>,
+    #[serde(rename = "nextPage")]
+    pub next_page: Option<String>,
+}
+
+/// `POST /api/search/metadata` — one page of the asset timeline/grid.
+/// `asset_type` is `Some("IMAGE")` / `Some("VIDEO")` / `None` (all).
+#[tauri::command]
+pub async fn browse_assets(
+    engine: State<'_, SyncEngine>,
+    page: u32,
+    size: u32,
+    asset_type: Option<String>,
+) -> CmdResult<BrowsePage> {
+    let client = engine.client().await.ok_or("Not connected to a server")?;
+    let search = MetadataSearch {
+        page,
+        size,
+        asset_type,
+        ..Default::default()
+    };
+    let resp = client
+        .search_assets(&search)
+        .await
+        .map_err(map_err)?;
+    Ok(BrowsePage {
+        items: resp.assets.items,
+        next_page: resp.assets.next_page,
+    })
+}
+
+/// `POST /api/search/metadata` with the full filter set (text query, type,
+/// favorite/archive/trash/not-in-album, date range, camera, people).
+#[tauri::command]
+pub async fn browse_search(
+    engine: State<'_, SyncEngine>,
+    search: MetadataSearch,
+) -> CmdResult<BrowsePage> {
+    let client = engine.client().await.ok_or("Not connected to a server")?;
+    let resp = client.search_assets(&search).await.map_err(map_err)?;
+    Ok(BrowsePage {
+        items: resp.assets.items,
+        next_page: resp.assets.next_page,
+    })
+}
+
+/// `POST /api/search/smart` — CLIP semantic search (needs ML on the server).
+#[tauri::command]
+pub async fn browse_smart(
+    engine: State<'_, SyncEngine>,
+    query: String,
+    page: u32,
+    size: u32,
+) -> CmdResult<BrowsePage> {
+    let client = engine.client().await.ok_or("Not connected to a server")?;
+    let resp = client
+        .smart_search(&query, page, size)
+        .await
+        .map_err(map_err)?;
+    Ok(BrowsePage {
+        items: resp.assets.items,
+        next_page: resp.assets.next_page,
+    })
+}
+
+/// `GET /api/assets/{id}` — full asset detail (incl. EXIF) for the info panel.
+#[tauri::command]
+pub async fn get_asset_detail(
+    engine: State<'_, SyncEngine>,
+    asset_id: String,
+) -> CmdResult<AssetDetail> {
+    let client = engine.client().await.ok_or("Not connected to a server")?;
+    client.asset_detail(&asset_id).await.map_err(map_err)
+}
+
+/// `GET /api/tags` — all tags, for the tag filter.
+#[tauri::command]
+pub async fn browse_tags(engine: State<'_, SyncEngine>) -> CmdResult<Vec<Tag>> {
+    let client = engine.client().await.ok_or("Not connected to a server")?;
+    client.tags().await.map_err(map_err)
+}
+
+/// `GET /api/people` — recognized people, for the People browser.
+#[tauri::command]
+pub async fn browse_people(engine: State<'_, SyncEngine>) -> CmdResult<Vec<Person>> {
+    let client = engine.client().await.ok_or("Not connected to a server")?;
+    let resp = client.people().await.map_err(map_err)?;
+    Ok(resp.people)
+}
+
+/// `GET /api/search/cities` — one asset per city, for the Places browser.
+#[tauri::command]
+pub async fn browse_cities(engine: State<'_, SyncEngine>) -> CmdResult<Vec<AssetDetail>> {
+    let client = engine.client().await.ok_or("Not connected to a server")?;
+    client.cities().await.map_err(map_err)
+}
+
+/// `GET /api/search/map` — geo markers for the map view.
+#[tauri::command]
+pub async fn browse_map(engine: State<'_, SyncEngine>) -> CmdResult<Vec<MapMarker>> {
+    let client = engine.client().await.ok_or("Not connected to a server")?;
+    client.search_map().await.map_err(map_err)
+}
+
+/// Local path of an asset uploaded from this machine, if any (info panel).
+#[tauri::command]
+pub async fn get_local_path(
+    engine: State<'_, SyncEngine>,
+    asset_id: String,
+) -> CmdResult<Option<String>> {
+    Ok(engine
+        .with_db(|db| db.local_path_for_asset(&asset_id).unwrap_or(None))
+        .await)
+}
+
+/// `GET /api/albums/{id}` — assets in a specific album.
+#[tauri::command]
+pub async fn browse_album_assets(
+    engine: State<'_, SyncEngine>,
+    album_id: String,
+) -> CmdResult<Vec<BrowseAsset>> {
+    let client = engine.client().await.ok_or("Not connected to a server")?;
+    client.album_assets(&album_id).await.map_err(map_err)
+}
+
+/// `GET /api/assets/{id}/original` — stream the original to a destination path
+/// chosen via the frontend save dialog. The destination is validated to be
+/// within the user's home directory as a defense against path traversal.
+#[tauri::command]
+pub async fn download_asset(
+    engine: State<'_, SyncEngine>,
+    asset_id: String,
+    destination: String,
+) -> CmdResult<()> {
+    use futures::StreamExt;
+    use tokio::io::AsyncWriteExt;
+
+    // Security: validate the destination resolves under the user's home
+    // directory. Prevents a compromised webview from writing to system paths
+    // (e.g. ~/.ssh/authorized_keys) via this command.
+    let dest = std::path::Path::new(&destination);
+    let home = dirs::home_dir().ok_or("could not resolve home directory")?;
+    let canonical_home = home.canonicalize().unwrap_or(home);
+    let parent = dest.parent().unwrap_or(std::path::Path::new("."));
+    let canonical_parent = std::fs::canonicalize(parent)
+        .map_err(|e| format!("invalid destination directory: {e}"))?;
+    if !canonical_parent.starts_with(&canonical_home) {
+        return Err("destination must be within your home directory".into());
+    }
+
+    let client = engine.client().await.ok_or("Not connected to a server")?;
+    let resp = client.download_asset(&asset_id).await.map_err(map_err)?;
+    let mut file = tokio::fs::File::create(&destination)
+        .await
+        .map_err(map_err)?;
+    let mut stream = resp.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(map_err)?;
+        file.write_all(&chunk).await.map_err(map_err)?;
+    }
+    file.flush().await.map_err(map_err)?;
+    Ok(())
 }
 
 /// Suggest default media folders (Pictures, Videos, etc.) that exist on this

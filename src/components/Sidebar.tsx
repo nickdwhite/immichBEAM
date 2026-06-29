@@ -2,6 +2,7 @@ import {
   FolderSync,
   HardDrive,
   History,
+  Images,
   Info,
   LayoutDashboard,
   ListChecks,
@@ -11,7 +12,7 @@ import {
   Settings,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { getVersion } from "@tauri-apps/api/app";
+import { api } from "../lib/tauri";
 import clsx from "clsx";
 import { StatusIndicator } from "./StatusIndicator";
 import { Logo } from "./Logo";
@@ -19,6 +20,7 @@ import { useFreeableRunning } from "../hooks/useFreeable";
 import type { SyncStatus } from "../types";
 
 export type Tab =
+  | "browse"
   | "overview"
   | "queue"
   | "history"
@@ -36,6 +38,10 @@ interface NavItem {
 }
 
 const SECTIONS: { title: string; items: NavItem[] }[] = [
+  {
+    title: "Library",
+    items: [{ id: "browse", label: "Browse", Icon: Images }],
+  },
   {
     title: "Activity",
     items: [
@@ -74,7 +80,7 @@ export function Sidebar({
   const scanning = useFreeableRunning();
   const [version, setVersion] = useState("");
   useEffect(() => {
-    getVersion().then(setVersion).catch(() => {});
+    api.getVersionDisplay().then(setVersion).catch(() => {});
   }, []);
 
   return (
@@ -142,7 +148,9 @@ export function Sidebar({
             {status.message}
           </p>
         )}
-        {version && <p className="mt-2 text-[11px] text-slate-400">v{version}</p>}
+        {version && (
+          <p className="mt-2 break-all text-[11px] text-slate-400">{version}</p>
+        )}
       </div>
     </aside>
   );

@@ -43,3 +43,6 @@ Thumbs.db
 # Local scratch (icon previews, working files)
 src-tauri/icons/_*
 scratch/
+
+# Private cross-tool work queue (planning/tasks/decisions) — never commit
+.workspace/

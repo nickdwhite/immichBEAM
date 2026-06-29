@@ -5,7 +5,14 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   Album,
   AppConfig,
+  AssetDetail,
+  BrowseAsset,
+  BrowsePage,
   ConfigDto,
+  MetadataSearch,
+  MapMarker,
+  Person,
+  Tag,
   ConnectionInfo,
   FolderInspect,
   FreeableScan,
@@ -27,6 +34,8 @@ import type {
 
 export const api = {
   getConfig: () => invoke<ConfigDto>("get_config"),
+
+  getVersionDisplay: () => invoke<string>("get_version_display"),
 
   testConnection: (url: string, apiKey: string | null, allowInsecure: boolean) =>
     invoke<ConnectionInfo>("test_connection", {
@@ -106,6 +115,29 @@ export const api = {
 
   checkForUpdate: () => invoke<UpdateInfo>("check_for_update"),
   installUpdate: () => invoke<void>("install_update"),
+
+  browseAssets: (page: number, size: number, assetType?: string) =>
+    invoke<BrowsePage>("browse_assets", {
+      page,
+      size,
+      assetType: assetType ?? null,
+    }),
+  browseSearch: (search: MetadataSearch) =>
+    invoke<BrowsePage>("browse_search", { search }),
+  browseSmart: (query: string, page: number, size: number) =>
+    invoke<BrowsePage>("browse_smart", { query, page, size }),
+  getAssetDetail: (assetId: string) =>
+    invoke<AssetDetail>("get_asset_detail", { assetId }),
+  browseTags: () => invoke<Tag[]>("browse_tags"),
+  browsePeople: () => invoke<Person[]>("browse_people"),
+  browseCities: () => invoke<AssetDetail[]>("browse_cities"),
+  browseMap: () => invoke<MapMarker[]>("browse_map"),
+  getLocalPath: (assetId: string) =>
+    invoke<string | null>("get_local_path", { assetId }),
+  browseAlbumAssets: (albumId: string) =>
+    invoke<BrowseAsset[]>("browse_album_assets", { albumId }),
+  downloadAsset: (assetId: string, destination: string) =>
+    invoke<void>("download_asset", { assetId, destination }),
 };
 
 // ---- events -------------------------------------------------------------

@@ -7,6 +7,7 @@ import { api } from "./lib/tauri";
 import { Sidebar, type Tab } from "./components/Sidebar";
 import { ActivityBar } from "./components/ActivityBar";
 import { Overview } from "./components/Overview";
+import { PhotoBrowser } from "./components/PhotoBrowser";
 import { ServerSettings } from "./components/ServerSettings";
 import { FolderSettings } from "./components/FolderSettings";
 import { SyncSettings } from "./components/SyncSettings";
@@ -20,6 +21,7 @@ import { useConfig } from "./hooks/useConfig";
 import { useStatus } from "./hooks/useStatus";
 
 const TITLES: Record<Tab, string> = {
+  browse: "Browse",
   overview: "Overview",
   queue: "Upload Queue",
   history: "History",
@@ -143,6 +145,7 @@ function App() {
           </div>
         </header>
 
+        <div className="relative flex flex-1 flex-col overflow-hidden">
         <ActivityBar status={status} />
 
         {removable && (
@@ -169,6 +172,7 @@ function App() {
         )}
 
         <section className="flex-1 overflow-auto p-6">
+          {tab === "browse" && <PhotoBrowser config={config} />}
           {tab === "overview" && (
             <Overview config={config} status={status} onNavigate={setTab} onSaved={reload} />
           )}
@@ -181,6 +185,9 @@ function App() {
           {tab === "diagnostics" && <Diagnostics />}
           {tab === "about" && <About />}
         </section>
+
+        <div id="lightbox-root" className="pointer-events-none absolute inset-0 z-[1100]" />
+        </div>
       </main>
     </div>
   );

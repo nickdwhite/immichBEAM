@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getVersion } from "@tauri-apps/api/app";
+import { api } from "../lib/tauri";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ExternalLink, Github } from "lucide-react";
 import { UpdateChecker } from "./UpdateChecker";
@@ -9,7 +9,7 @@ import { IN_APP_UPDATES_ENABLED } from "../lib/release";
 export function About() {
   const [version, setVersion] = useState("");
   useEffect(() => {
-    getVersion().then(setVersion).catch(() => {});
+    api.getVersionDisplay().then(setVersion).catch(() => {});
   }, []);
 
   return (
@@ -19,7 +19,7 @@ export function About() {
         <div>
           <h2 className="text-lg font-semibold">Immich Beam</h2>
           <p className="text-sm text-slate-500">
-            {version && `v${version} · `}Desktop sync client for Immich
+            {version && `${version} · `}Desktop sync client for Immich
           </p>
         </div>
       </div>

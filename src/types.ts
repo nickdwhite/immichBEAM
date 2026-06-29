@@ -183,3 +183,120 @@ export interface UpdateProgress {
   total: number | null;
   pct: number;
 }
+
+// ---- Remote browser (download direction) -------------------------------
+// Field names mirror the serde-renamed shape the Rust backend serializes
+// (see BrowseAsset in src-tauri/src/api/types.rs), NOT the Rust field names.
+
+export interface BrowseAsset {
+  id: string;
+  type: string; // "IMAGE" | "VIDEO"
+  originalFileName: string | null;
+  originalMimeType: string | null;
+  fileCreatedAt: string | null;
+  duration: string | null;
+  isFavorite: boolean;
+  livePhotoVideoId: string | null;
+}
+
+export interface BrowsePage {
+  items: BrowseAsset[];
+  nextPage: string | null;
+}
+
+// Sent to browse_search / browse_smart. Field names match the Rust MetadataSearch
+// serde shape (rename_all = "camelCase", asset_type -> "type").
+export interface MetadataSearch {
+  page: number;
+  size: number;
+  query?: string;
+  originalFileName?: string;
+  description?: string;
+  type?: "IMAGE" | "VIDEO" | "AUDIO" | "OTHER";
+  isFavorite?: boolean;
+  isArchived?: boolean;
+  isTrashed?: boolean;
+  visibility?: string;
+  isNotInAlbum?: boolean;
+  takenAfter?: string;
+  takenBefore?: string;
+  make?: string;
+  model?: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  personIds?: string[];
+  tagIds?: string[];
+}
+
+export interface Tag {
+  id: string;
+  name?: string;
+  value?: string;
+  color?: string;
+}
+
+export interface Person {
+  id: string;
+  name?: string;
+  thumbnailPath?: string;
+  isHidden?: boolean;
+  isFavorite?: boolean;
+}
+
+export interface MapMarker {
+  id: string;
+  lat: number;
+  lon: number;
+}
+
+export interface ExifInfo {
+  make?: string | null;
+  model?: string | null;
+  lensModel?: string | null;
+  fNumber?: number | null;
+  focalLength?: number | null;
+  iso?: number | null;
+  exposureTime?: string | null;
+  dateTimeOriginal?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  fileSizeInByte?: number | null;
+  description?: string | null;
+  orientation?: string | null;
+  exifImageWidth?: number | null;
+  exifImageHeight?: number | null;
+  rating?: number | null;
+  timeZone?: string | null;
+}
+
+export interface AssetDetail {
+  id: string;
+  type: string;
+  originalFileName?: string | null;
+  originalMimeType?: string | null;
+  originalPath?: string | null;
+  fileCreatedAt?: string | null;
+  updatedAt?: string | null;
+  exifInfo?: ExifInfo | null;
+  isFavorite?: boolean;
+  livePhotoVideoId?: string | null;
+  width?: number | null;
+  height?: number | null;
+  duration?: string | null;
+  localDateTime?: string | null;
+  createdAt?: string | null;
+  isArchived?: boolean;
+  isTrashed?: boolean;
+  isOffline?: boolean;
+  tags?: Tag[];
+  people?: PersonBrief[];
+}
+
+export interface PersonBrief {
+  id: string;
+  name?: string;
+}
