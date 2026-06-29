@@ -298,9 +298,26 @@ async fn thumbnail_response(
 /// Proxy response for inline `<video>`: pass through Immich's status and the
 /// headers a media element needs (Content-Type, Content-Length, Content-Range,
 /// Accept-Ranges) so seeking works. The body is buffered per request — Range
-/// chunks are small; a full no-range response buffers the whole transcoded clip.
+/// chunks are small; a full no-range response is rejected if > 256 MB.
 async fn proxy_response(resp: reqwest::Response) -> tauri::http::Response<Vec<u8>> {
     let status = resp.status().as_u16();
+    // Reject excessively large no-Range responses to prevent OOM. Normal Range
+    // requests (from <video>) fetch small chunks; this only catches pathological
+    // full-body requests on large assets.
+    const MAX_PROXY_BYTES: u64 = 256 * 1024 * 1024;
+    if let Some(len) = resp
+        .headers()
+        .get("content-length")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse::<u64>().ok())
+    {
+        if len > MAX_PROXY_BYTES {
+            return text_response(
+                413,
+                "asset too large to proxy inline — use Download instead",
+            );
+        }
+    }
     let mut builder = tauri::http::Response::builder().status(status);
     for name in &[
         "content-type",
