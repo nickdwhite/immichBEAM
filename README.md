@@ -142,6 +142,19 @@ pnpm tauri build
 
 Tested with Immich v2.x. Includes forward-compatibility shims for upcoming v3 API changes (visibility enum, duration format, search fields).
 
+## Roadmap
+
+These are planned features beyond the current release:
+
+- **Local media browser** — browse and view files in your watched folders directly
+- **Simple mode** — streamlined UI for non-technical users
+- **Permission scoping** — detect Immich user/API key permissions and only expose available features
+- **Inline editing** — rename albums, assign tags, rename people, edit location from the browse interface
+- **Enhanced disk cleanup** — expanded local file management and utilities
+- **Admin installer bundles** — pre-configured installers with scoped features for deployment
+- **Multi-server support** — connect multiple Immich servers and assign folders per server
+- **Immich v3 API** — full compatibility with auto-detection of server version
+
 ## License
 
-MIT
+[WTFPL](http://www.wtfpl.net/) — Do What The Fuck You Want To Public License.
