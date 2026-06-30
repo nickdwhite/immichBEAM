@@ -48,7 +48,7 @@ export function QueueView({ status }: { status: SyncStatus }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           onClick={() => (paused ? api.resume() : api.pause())}
           title={paused ? "Resume processing the upload queue" : "Pause all uploads"}
@@ -82,11 +82,11 @@ export function QueueView({ status }: { status: SyncStatus }) {
         >
           <Trash2 size={16} /> Clear
         </button>
-        <span className="ml-auto text-sm text-slate-500">
-          {status.pending} pending
-          {totalBytes > 0 && ` · ${fmtBytes(totalBytes)} queued`} ·{" "}
-          {status.uploaded_session} uploaded this session
-        </span>
+      </div>
+      <div className="text-sm text-slate-500">
+        {status.pending} pending
+        {totalBytes > 0 && ` · ${fmtBytes(totalBytes)} queued`} ·{" "}
+        {status.uploaded_session} uploaded this session
       </div>
 
       {confirmClear && (

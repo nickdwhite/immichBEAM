@@ -12,7 +12,7 @@ All notable changes to immichBEAM are documented here. The format follows
 - Activity section moved above Library in sidebar navigation.
 - Horizontal logo for README, circular icon for in-app and favicon.
 - Updated README description and header image.
-- Release workflow now builds for Ubuntu 22.04, 24.04, and 26.04.
+- Release workflow now builds for Ubuntu 24.04 and 26.04 (x64 + ARM), Windows x64 + ARM.
 
 ## [0.4.0] - 2026-06-30
 

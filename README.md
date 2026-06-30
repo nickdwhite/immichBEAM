@@ -45,6 +45,14 @@ immichBEAM sits in your system tray and keeps your photos and videos backed up t
     <td><img src="screenshots/map.png" width="400" alt="Map view" /><br/><sub>Map view with clustered markers and hover previews</sub></td>
     <td align="center"><img src="screenshots/tray.png" width="280" alt="System tray menu" /><br/><sub>System tray with live status and quick actions</sub></td>
   </tr>
+  <tr>
+    <td><img src="screenshots/queue.png" width="400" alt="Upload queue" /><br/><sub>Live upload queue with progress, retries, and bandwidth control</sub></td>
+    <td><img src="screenshots/history.png" width="400" alt="Upload history" /><br/><sub>Upload history with status filtering and per-file details</sub></td>
+  </tr>
+  <tr>
+    <td><img src="screenshots/sync.png" width="400" alt="Sync settings" /><br/><sub>Sync settings with bandwidth limits and watcher tuning</sub></td>
+    <td></td>
+  </tr>
 </table>
 
 ## Features

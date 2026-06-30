@@ -217,7 +217,7 @@ export function PhotoLightbox({
         className="flex items-center justify-between gap-3 p-3 text-slate-900 dark:text-white"
         onClick={(e) => e.stopPropagation()}
       >
-        <span className="truncate text-sm">
+        <span className="min-w-0 truncate text-sm">
           {asset.originalFileName ?? asset.id}
         </span>
         <div className="flex shrink-0 gap-2">

@@ -13,9 +13,12 @@ dist-ssr
 *.local
 
 # Editor directories and files
-.vscode/*
-.idea
-.DS_Store
+.vscode/
+.idea/
+.fleet/
+.zed/
+*.sublime-project
+*.sublime-workspace
 *.suo
 *.ntvs*
 *.njsproj
@@ -32,7 +35,9 @@ dist-ssr
 *.key
 
 # OS cruft
+.DS_Store
 Thumbs.db
+Desktop.ini
 *.icloud
 
 # Build bundles (also covered by src-tauri/target, belt-and-suspenders)
@@ -43,8 +48,21 @@ Thumbs.db
 src-tauri/icons/_*
 scratch/
 
-# Private cross-tool work queue (planning/tasks/decisions) — never commit
+# AI / agent tooling
+.claude/
+.cursor/
+.codex/
+.opencode/
+.omo/
+.sisyphus/
+.cline/
+.continue/
+.windsurf/
+.bolt/
+.augment/
 .workspace/
+.aider*
+AGENTS.md
 
 # Internal docs and design tooling — not for public consumption
 docs/
