@@ -85,11 +85,11 @@ export function Sidebar({
 
   return (
     <aside className="flex w-56 flex-col border-r border-slate-200 bg-white dark:border-navy-800 dark:bg-navy-900">
-      <div className="flex items-center gap-2 px-4 py-4">
-        <Logo size={32} className="rounded-lg" />
-        <div className="leading-tight">
-          <div className="text-sm font-semibold">Immich</div>
-          <div className="text-xs text-slate-500">Beam</div>
+      <div className="flex items-center gap-3 px-4 py-4">
+        <Logo size={48} />
+        <div className="-space-y-1.5">
+          <div className="text-xl font-light tracking-wide text-slate-700 dark:text-slate-200">immich</div>
+          <div className="text-lg font-extrabold uppercase tracking-[0.25em] text-brand-600 dark:text-brand-400">Beam</div>
         </div>
       </div>
 

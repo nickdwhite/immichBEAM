@@ -15,7 +15,7 @@ export function About() {
   return (
     <div className="max-w-xl space-y-6">
       <div className="flex items-center gap-4">
-        <Logo size={52} className="rounded-xl" />
+        <Logo size={64} />
         <div>
           <h2 className="text-lg font-semibold">Immich Beam</h2>
           <p className="text-sm text-slate-500">
