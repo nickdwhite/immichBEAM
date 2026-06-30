@@ -4,6 +4,16 @@ All notable changes to immichBEAM are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.1] - 2026-06-30
+
+### Changed
+
+- Sidebar uses circular app icon with immich/BEAM text branding.
+- Activity section moved above Library in sidebar navigation.
+- Horizontal logo for README, circular icon for in-app and favicon.
+- Updated README description and header image.
+- Release workflow now builds for Ubuntu 22.04, 24.04, and 26.04.
+
 ## [0.4.0] - 2026-06-30
 
 ### Added

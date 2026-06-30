@@ -1,7 +1,3 @@
-/**
- * The immichBEAM brand mark — a blue UFO beaming the Immich logo, tilted 60°
- * (`public/logo.png`). Used in the sidebar, About screen, and as the favicon.
- */
 export function Logo({
   size = 32,
   className = "",
@@ -13,7 +9,7 @@ export function Logo({
 }) {
   return (
     <img
-      src="/logo.png"
+      src="/logo-circular.png"
       width={size}
       height={size}
       alt={title}

@@ -1,6 +1,6 @@
 [package]
 name = "immichBEAM"
-version = "0.4.0"
+version = "0.4.1"
 description = "Cross-platform desktop sync client for Immich"
 authors = ["immichBEAM"]
 edition = "2021"

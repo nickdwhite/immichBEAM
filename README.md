@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="public/logo.png" width="120" alt="immichBEAM logo" />
+  <img src="public/logo.png" width="480" alt="immichBEAM — a secure, cross-platform desktop media sync client for Immich" />
 </p>
 
-<h1 align="center">immichBEAM</h1>
+<!-- immichBEAM — immich BEAM -->
 
 <p align="center">
-  A cross-platform desktop sync client for <a href="https://immich.app">Immich</a>.<br/>
-  Watches your folders, uploads automatically, and lets you browse your entire library — all from the system tray.
+  A secure, cross-platform desktop media sync client for your private <a href="https://immich.app">Immich</a> server(s).<br/>
+  Resides in the system tray, watches folders, and allows you to search, browse, and manage your remote photo and video library.
 </p>
 
 <p align="center">

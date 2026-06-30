@@ -39,16 +39,16 @@ interface NavItem {
 
 const SECTIONS: { title: string; items: NavItem[] }[] = [
   {
-    title: "Library",
-    items: [{ id: "browse", label: "Browse", Icon: Images }],
-  },
-  {
     title: "Activity",
     items: [
       { id: "overview", label: "Overview", Icon: LayoutDashboard },
       { id: "queue", label: "Queue", Icon: ListChecks },
       { id: "history", label: "History", Icon: History },
     ],
+  },
+  {
+    title: "Library",
+    items: [{ id: "browse", label: "Browse", Icon: Images }],
   },
   {
     title: "Settings",
