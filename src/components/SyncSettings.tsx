@@ -225,7 +225,7 @@ export function SyncSettings({
           Behavior
         </h3>
         <div className="space-y-4">
-          <label className="flex items-center gap-2 text-sm" title="Start Immich Beam when you log in to your computer">
+          <label className="flex items-center gap-2 text-sm" title="Start immichBEAM when you log in to your computer">
             <input
               type="checkbox"
               checked={autostart}

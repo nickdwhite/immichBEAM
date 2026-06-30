@@ -890,7 +890,7 @@ impl SyncEngine {
             .app
             .notification()
             .builder()
-            .title("Immich Beam — upload failed")
+            .title("immichBEAM — upload failed")
             .body(format!("Gave up on \"{filename}\" after repeated retries."))
             .show();
     }

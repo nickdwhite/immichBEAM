@@ -28,7 +28,7 @@ pub fn build_tray<R: Runtime>(app: &AppHandle<R>) -> Result<()> {
     let web = MenuItem::with_id(app, ID_WEB, "Open Web UI", true, None::<&str>)?;
     let sep1 = PredefinedMenuItem::separator(app)?;
     let sep2 = PredefinedMenuItem::separator(app)?;
-    let quit = MenuItem::with_id(app, ID_QUIT, "Quit Immich Beam", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, ID_QUIT, "Quit immichBEAM", true, None::<&str>)?;
 
     let menu = Menu::with_items(
         app,
@@ -45,7 +45,7 @@ pub fn build_tray<R: Runtime>(app: &AppHandle<R>) -> Result<()> {
     TrayIconBuilder::with_id("main-tray")
         .icon(initial_icon)
         .icon_as_template(true)
-        .tooltip("Immich Beam")
+        .tooltip("immichBEAM")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(move |app, event| handle_menu_event(app, event.id.as_ref()))
@@ -157,11 +157,11 @@ pub fn update_status_label<R: Runtime>(
         let tooltip = if icon == "syncing" && pending > 0 {
             let total = pending as u64 + uploaded_session;
             format!(
-                "Immich Beam — Uploading {}/{} files",
+                "immichBEAM — Uploading {}/{} files",
                 uploaded_session, total
             )
         } else {
-            format!("Immich Beam — {}", icon_tooltip(icon))
+            format!("immichBEAM — {}", icon_tooltip(icon))
         };
         let _ = tray.set_tooltip(Some(tooltip));
         if let Ok(image) = tauri::image::Image::from_bytes(state_icon_bytes(icon)) {

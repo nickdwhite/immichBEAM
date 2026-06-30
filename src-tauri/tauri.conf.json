@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Immich Beam",
+  "productName": "immichBEAM",
   "version": "0.4.0-beta.1",
   "identifier": "com.immichbeam.desktop",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Immich Beam",
+        "title": "immichBEAM",
         "width": 900,
         "height": 600,
         "minWidth": 700,
@@ -64,7 +64,7 @@
     "updater": {
       "pubkey": "REPLACE_WITH_YOUR_TAURI_UPDATER_PUBLIC_KEY",
       "endpoints": [
-        "https://github.com/REPLACE_OWNER/immich-beam/releases/latest/download/latest.json"
+        "https://github.com/REPLACE_OWNER/immichBEAM/releases/latest/download/latest.json"
       ],
       "windows": {
         "installMode": "passive"

@@ -17,7 +17,7 @@ export function About() {
       <div className="flex items-center gap-4">
         <Logo size={64} />
         <div>
-          <h2 className="text-lg font-semibold">Immich Beam</h2>
+          <h2 className="text-lg font-semibold">immichBEAM</h2>
           <p className="text-sm text-slate-500">
             {version && `${version} · `}Desktop sync client for Immich
           </p>
@@ -25,7 +25,7 @@ export function About() {
       </div>
 
       <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-        Immich Beam keeps your photos and videos backed up to your self-hosted{" "}
+        immichBEAM keeps your photos and videos backed up to your self-hosted{" "}
         <button
           onClick={() => openUrl("https://immich.app").catch(() => {})}
           className="text-brand-600 hover:underline dark:text-brand-400"
@@ -67,14 +67,14 @@ export function About() {
         <div className="flex flex-col gap-2">
           <button
             onClick={() =>
-              openUrl("https://github.com/nickdwhite/immich-beam").catch(
+              openUrl("https://github.com/nickdwhite/immichBEAM").catch(
                 () => {},
               )
             }
             className="inline-flex items-center gap-1.5 text-sm text-brand-600 hover:underline dark:text-brand-400"
           >
             <Github size={14} />
-            Immich Beam on GitHub
+            immichBEAM on GitHub
           </button>
           <button
             onClick={() => openUrl("https://immich.app").catch(() => {})}

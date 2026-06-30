@@ -62,7 +62,7 @@ export function Onboarding({
         Get started
       </h3>
       <p className="text-xs text-brand-700/80 dark:text-brand-300/80">
-        A couple of steps and Immich Beam will start backing up your photos.
+        A couple of steps and immichBEAM will start backing up your photos.
       </p>
       <ul className="mt-3 space-y-1.5">
         {steps.map((s) => (

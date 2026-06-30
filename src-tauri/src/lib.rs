@@ -1,4 +1,4 @@
-//! Immich Beam — Tauri application entry point and setup.
+//! immichBEAM — Tauri application entry point and setup.
 
 mod api;
 mod commands;
@@ -55,10 +55,10 @@ pub fn run() {
             let handle = app.handle().clone();
 
             // Keep the title bar in sync with the running version, e.g.
-            // "immich-beam v0.1.0", regardless of what's baked into
+            // "immichBEAM v0.1.0", regardless of what's baked into
             // tauri.conf.json at build time.
             if let Some(window) = app.get_webview_window("main") {
-                let _ = window.set_title(&format!("Immich Beam — {}", version_display()));
+                let _ = window.set_title(&format!("immichBEAM — {}", version_display()));
             }
 
             // Load persisted config and open the database.
@@ -236,7 +236,7 @@ pub fn run() {
             updater::install_update,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Immich Beam");
+        .expect("error while running immichBEAM");
 }
 
 /// A minimal text error response for the `immichasset` URI scheme handler.

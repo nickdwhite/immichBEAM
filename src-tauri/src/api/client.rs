@@ -134,7 +134,7 @@ impl ImmichClient {
     ) -> Result<Self> {
         let base_url = base_url.trim_end_matches('/').to_string();
         let mut builder = Client::builder()
-            .user_agent(concat!("ImmichBeam/", env!("CARGO_PKG_VERSION")))
+            .user_agent(concat!("immichBEAM/", env!("CARGO_PKG_VERSION")))
             .tls_info(true)
             .connect_timeout(Duration::from_secs(10))
             .timeout(Duration::from_secs(3600));
