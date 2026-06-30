@@ -87,6 +87,14 @@ pub struct AssetUploadResponse {
     pub status: String,
 }
 
+/// Response of `GET /api/assets/statistics`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct AssetStatistics {
+    pub images: u64,
+    pub videos: u64,
+    pub total: u64,
+}
+
 /// A minimal album representation from `GET /api/albums`.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Album {

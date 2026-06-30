@@ -120,6 +120,11 @@ export interface HistoryStats {
   last_uploaded_at: number | null;
 }
 
+export interface OverviewCounts {
+  local_files: number;
+  remote_assets: number;
+}
+
 export interface ProgressPayload {
   id: string;
   path: string;

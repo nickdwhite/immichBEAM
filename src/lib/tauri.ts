@@ -15,6 +15,7 @@ import type {
   Tag,
   ConnectionInfo,
   FolderInspect,
+  OverviewCounts,
   FreeableScan,
   FreeResult,
   HistoryItem,
@@ -86,6 +87,7 @@ export const api = {
   clearHistory: () => invoke<number>("clear_history"),
 
   getStats: () => invoke<HistoryStats>("get_stats"),
+  getOverviewCounts: () => invoke<OverviewCounts>("get_overview_counts"),
 
   pause: () => invoke<void>("pause_sync"),
   resume: () => invoke<void>("resume_sync"),

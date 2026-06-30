@@ -2,20 +2,23 @@ import {
   CheckCircle2,
   ChevronRight,
   Copy,
+  FolderOpen,
   Images,
   ListChecks,
   Pause,
   Play,
   RefreshCw,
+  Server,
   XCircle,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { api } from "../lib/tauri";
 import { useStats } from "../hooks/useStats";
 import { StatusIndicator } from "./StatusIndicator";
 import { SecurityBadge } from "./SecurityBadge";
 import { Onboarding } from "./Onboarding";
 import type { Tab } from "./Sidebar";
-import type { ConfigDto, SyncStatus } from "../types";
+import type { ConfigDto, OverviewCounts, SyncStatus } from "../types";
 
 function StatCard({
   label,
@@ -29,7 +32,7 @@ function StatCard({
   color: string;
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+    <div className="rounded-xl border border-slate-200 bg-white p-4 text-center dark:border-slate-800 dark:bg-slate-900">
       <div className={`mb-2 inline-flex rounded-lg p-2 ${color}`}>
         <Icon size={18} />
       </div>
@@ -61,6 +64,12 @@ export function Overview({
 }) {
   const stats = useStats();
   const paused = status.state === "paused";
+  const [counts, setCounts] = useState<OverviewCounts | null>(null);
+  useEffect(() => {
+    if (config.server_url) {
+      api.getOverviewCounts().then(setCounts).catch(() => {});
+    }
+  }, [config.server_url]);
 
   return (
     <div className="space-y-6">
@@ -143,6 +152,23 @@ export function Overview({
           color="bg-immich-100 text-immich-600 dark:bg-immich-900/40 dark:text-immich-300"
         />
       </div>
+
+      {counts && (
+        <div className="grid grid-cols-2 gap-4">
+          <StatCard
+            label="Local files"
+            value={counts.local_files}
+            Icon={FolderOpen}
+            color="bg-amber-100 text-amber-600 dark:bg-amber-900/40 dark:text-amber-300"
+          />
+          <StatCard
+            label="Server assets"
+            value={counts.remote_assets}
+            Icon={Server}
+            color="bg-violet-100 text-violet-600 dark:bg-violet-900/40 dark:text-violet-300"
+          />
+        </div>
+      )}
 
       <p className="text-xs text-slate-400">
         {stats.total} total items processed · {config.folders.length} folder

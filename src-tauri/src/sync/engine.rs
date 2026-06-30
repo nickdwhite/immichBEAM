@@ -81,6 +81,8 @@ struct Inner {
     /// persistently failing login isn't retried every loop.
     last_refresh_ms: AtomicU64,
     /// Cache of album-name → album-id for lazy create-or-find.
+    /// Also serializes resolve-or-create to prevent duplicate album creation
+    /// when concurrent uploads race past the cache check.
     album_name_cache: Mutex<std::collections::HashMap<String, String>>,
 }
 
@@ -193,6 +195,30 @@ impl SyncEngine {
             .filter(|f| f.enabled)
             .map(|f| (PathBuf::from(&f.path), f.recursive))
             .collect()
+    }
+
+    pub async fn count_local_files(&self) -> u64 {
+        let folders = self.enabled_folders().await;
+        let cfg = self.inner.config.lock().await;
+        let ext_set = cfg.extension_set();
+        let follow = cfg.follow_symlinks;
+        drop(cfg);
+        let mut count: u64 = 0;
+        for (folder, recursive) in folders {
+            let files = tokio::task::spawn_blocking(move || scan_folder(&folder, recursive, follow))
+                .await
+                .unwrap_or_default();
+            for path in &files {
+                let matched = {
+                    let cfg = self.inner.config.lock().await;
+                    cfg.matches_filter_with(path, &ext_set)
+                };
+                if matched {
+                    count += 1;
+                }
+            }
+        }
+        count
     }
 
     /// Ingest task: filter incoming filesystem events and enqueue matches.
@@ -945,22 +971,19 @@ impl SyncEngine {
 
     /// Find an existing album by exact name or create one. Caches the id so
     /// repeated uploads to the same folder don't hit the server each time.
+    /// Holds the cache lock across the entire check→fetch→create sequence to
+    /// prevent concurrent uploads from racing and creating duplicate albums.
     async fn resolve_album_by_name(&self, name: &str) -> Option<String> {
-        {
-            let cache = self.inner.album_name_cache.lock().await;
-            if let Some(id) = cache.get(name) {
-                return Some(id.clone());
-            }
+        let mut cache = self.inner.album_name_cache.lock().await;
+        if let Some(id) = cache.get(name) {
+            return Some(id.clone());
         }
         let client = self.client().await?;
         let albums = client.albums().await.ok()?;
         if let Some(found) = albums.iter().find(|a| a.album_name == name) {
             let id = found.id.clone();
-            self.inner
-                .album_name_cache
-                .lock()
-                .await
-                .insert(name.to_string(), id.clone());
+            cache.insert(name.to_string(), id.clone());
+            drop(cache);
             self.cache_device_album_if_needed(name, &id).await;
             return Some(id);
         }
@@ -968,11 +991,8 @@ impl SyncEngine {
             Ok(album) => {
                 log::info!("created album '{}' ({})", name, album.id);
                 let id = album.id.clone();
-                self.inner
-                    .album_name_cache
-                    .lock()
-                    .await
-                    .insert(name.to_string(), id.clone());
+                cache.insert(name.to_string(), id.clone());
+                drop(cache);
                 self.cache_device_album_if_needed(name, &id).await;
                 Some(id)
             }

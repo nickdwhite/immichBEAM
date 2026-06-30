@@ -359,6 +359,25 @@ pub async fn get_stats(engine: State<'_, SyncEngine>) -> CmdResult<crate::db::Hi
         .map_err(map_err)
 }
 
+#[derive(Serialize)]
+pub struct OverviewCounts {
+    pub local_files: u64,
+    pub remote_assets: u64,
+}
+
+#[tauri::command]
+pub async fn get_overview_counts(engine: State<'_, SyncEngine>) -> CmdResult<OverviewCounts> {
+    let local = engine.count_local_files().await;
+    let remote = match engine.client().await {
+        Some(c) => c.asset_statistics().await.map(|s| s.total).unwrap_or(0),
+        None => 0,
+    };
+    Ok(OverviewCounts {
+        local_files: local,
+        remote_assets: remote,
+    })
+}
+
 #[tauri::command]
 pub async fn rescan(engine: State<'_, SyncEngine>) -> CmdResult<()> {
     engine.scan_all().await;

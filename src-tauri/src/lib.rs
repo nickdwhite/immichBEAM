@@ -207,6 +207,7 @@ pub fn run() {
             commands::retry_failed,
             commands::retry_item,
             commands::get_stats,
+            commands::get_overview_counts,
             commands::rescan,
             commands::repair_queue,
             commands::clear_queue,

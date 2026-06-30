@@ -722,6 +722,17 @@ impl ImmichClient {
         }
         Ok(resp)
     }
+
+    pub async fn asset_statistics(&self) -> Result<AssetStatistics> {
+        let resp = self
+            .authed(self.http.get(self.url("/api/assets/statistics")))
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            return Err(api_error(resp).await);
+        }
+        Ok(resp.json().await?)
+    }
 }
 
 /// Encode raw SHA1 bytes as Base64 (for bulk-upload-check).
