@@ -93,7 +93,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_type == 'tag' && github.ref_name || format('v{0}', github.run_number) }}
-          releaseName: "Immich Beam ${{ github.ref_type == 'tag' && github.ref_name || github.run_number }}"
+          releaseName: "immichBEAM ${{ github.ref_type == 'tag' && github.ref_name || github.run_number }}"
           releaseBody: "Download the installer for your platform from the assets below."
           releaseDraft: true
           prerelease: false
