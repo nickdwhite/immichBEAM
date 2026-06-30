@@ -44,7 +44,7 @@ pub fn build_tray<R: Runtime>(app: &AppHandle<R>) -> Result<()> {
 
     TrayIconBuilder::with_id("main-tray")
         .icon(initial_icon)
-        .icon_as_template(false)
+        .icon_as_template(true)
         .tooltip("Immich Beam")
         .menu(&menu)
         .show_menu_on_left_click(false)
@@ -166,6 +166,7 @@ pub fn update_status_label<R: Runtime>(
         let _ = tray.set_tooltip(Some(tooltip));
         if let Ok(image) = tauri::image::Image::from_bytes(state_icon_bytes(icon)) {
             let _ = tray.set_icon(Some(image));
+            let _ = tray.set_icon_as_template(true);
         }
     }
     // Refresh the disabled "Status:" line in the menu.
