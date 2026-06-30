@@ -54,7 +54,7 @@ immichBEAM sits in your system tray and keeps your photos and videos backed up t
 - SHA1 content hashing with an SQLite cache — only new/changed files are processed
 - Server-side duplicate detection before upload
 - Durable upload queue that survives restarts, with retries and exponential backoff
-- Configurable upload concurrency and bandwidth throttling
+- Configurable upload concurrency and bandwidth throttling (global limit shared across all concurrent uploads)
 - Streaming uploads with live per-file progress
 - Live Photo pairing (still + video linked automatically)
 - XMP sidecar support
