@@ -1,107 +1,147 @@
-# Immich Beam
+<p align="center">
+  <img src="public/logo.png" width="120" alt="immichBEAM logo" />
+</p>
 
-A lightweight, cross-platform desktop sync client for [Immich](https://immich.app/).
-It lives in the system tray, watches local folders, and automatically uploads new
-photos and videos to your Immich server — much like the Google Drive or Dropbox
-desktop apps.
+<h1 align="center">immichBEAM</h1>
 
-Built with **Tauri 2**, **React 19 + TypeScript**, and a **Rust** backend.
+<p align="center">
+  A cross-platform desktop sync client for <a href="https://immich.app">Immich</a>.<br/>
+  Watches your folders, uploads automatically, and lets you browse your entire library — all from the system tray.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/platforms-macOS%20%7C%20Windows%20%7C%20Linux-blue" alt="Platforms" />
+  <img src="https://img.shields.io/badge/built%20with-Tauri%202%20%2B%20React%2019%20%2B%20Rust-orange" alt="Built with" />
+</p>
+
+---
+
+<p align="center">
+  <img src="screenshots/overview.png" width="720" alt="Overview dashboard" />
+</p>
+
+## What it does
+
+immichBEAM sits in your system tray and keeps your photos and videos backed up to your self-hosted [Immich](https://immich.app) server. Think Google Drive or Dropbox, but for your photo library.
+
+- **Watch folders** and automatically upload new photos and videos
+- **Browse your entire Immich library** — timeline, albums, people, places, and map
+- **Smart search** with CLIP semantic search ("sunset at the beach")
+- **System tray** with live status, pause/resume, and quick actions
+- **Cross-platform** — macOS, Windows, and Linux
+
+## Screenshots
+
+<table>
+  <tr>
+    <td><img src="screenshots/browse.png" width="400" alt="Photo browser" /><br/><sub>Browse your library with filters, search, and smart search</sub></td>
+    <td><img src="screenshots/lightbox.png" width="400" alt="Photo viewer" /><br/><sub>Full photo viewer with EXIF, GPS, download, and local path</sub></td>
+  </tr>
+  <tr>
+    <td><img src="screenshots/folder.png" width="400" alt="Folder settings" /><br/><sub>Watch folders with per-folder album assignment</sub></td>
+    <td><img src="screenshots/server.png" width="400" alt="Server settings" /><br/><sub>API key or email/password auth with certificate pinning</sub></td>
+  </tr>
+  <tr>
+    <td><img src="screenshots/map.png" width="400" alt="Map view" /><br/><sub>Map view with clustered markers and hover previews</sub></td>
+    <td align="center"><img src="screenshots/tray.png" width="280" alt="System tray menu" /><br/><sub>System tray with live status and quick actions</sub></td>
+  </tr>
+</table>
 
 ## Features
 
-- System tray with dynamic, connection-aware status (offline / insecure /
-  secure / syncing / paused) and a quick-action menu (pause/resume, open
-  dashboard, open web UI, quit). The tray label shows live queue depth.
-- Minimize-to-tray on window close; optional launch-on-login; single-instance
-  (a second launch focuses the existing window).
-- Recursive folder watching with debounced filesystem events.
-- SHA1 content hashing (with a hashing-progress phase for large files) and an
-  SQLite hash cache so only new/changed files are processed.
-- Server-side duplicate detection via `bulk-upload-check` before upload.
-- Durable upload queue that survives restarts, with retries + exponential
-  backoff and auto-resume on reconnect, plus a typed error classifier.
-- Configurable concurrency and bandwidth throttling.
-- Streaming uploads with live per-file and overall progress.
-- **Live Photos** (same-named still + video are paired and linked) and **XMP
-  sidecars** (`name.xmp` / `name.ext.xmp`) attached on upload.
-- Per-folder **albums**, with uploaded assets batched into album adds.
-- Content sniffing for ambiguous extensions (e.g. `.ts` = MPEG-TS vs
-  TypeScript), recorded in history with a reason.
-- **Free Up Space**: trash local files already safely backed up (verified by
-  checksum + not server-trashed), with a background scan and a batched, silent
-  OS-trash move. Only scan-confirmed paths can be trashed.
-- **Security**: API key stored only in the OS keychain (read once, cached in
-  memory, never written to disk or logged); least-privilege IPC capabilities;
-  trust-on-first-use **certificate pinning** for self-signed servers (captures
-  and pins the cert on first connect, then trusts only that one).
-- **Dashboard** grouped into Activity (Overview / Queue / History), Settings
-  (Server / Folders / Sync), and Tools (Free Up Space / Diagnostics / About):
-  live queue, per-folder albums, file-type filters, queue repair/clear, upload
-  history with status filtering and per-row retry, and a log viewer.
-- First-run onboarding, toast feedback, light/dark/system theme, and a
-  keyboard-accessible UI.
-- CI that packages macOS, Windows, and Linux installers, plus in-app
-  **auto-update** wiring for a future public/authenticated update feed (see
-  `docs/RELEASING.md`).
+### Sync engine
+- Recursive folder watching with debounced filesystem events
+- SHA1 content hashing with an SQLite cache — only new/changed files are processed
+- Server-side duplicate detection before upload
+- Durable upload queue that survives restarts, with retries and exponential backoff
+- Configurable upload concurrency and bandwidth throttling
+- Streaming uploads with live per-file progress
+- Live Photo pairing (still + video linked automatically)
+- XMP sidecar support
 
-Built on an r2d2 SQLite connection pool (WAL) and reqwest 0.13. See
-`docs/SECURITY_REVIEW.md` for the security posture and `CHANGELOG.md` for
-release history.
+### Library browser
+- **Timeline** — infinite-scroll grid of your entire library
+- **Albums** — browse, open, and filter album contents
+- **People** — recognized faces; click to see their photos
+- **Places** — browse by city
+- **Map** — clustered markers with hover previews on a theme-aware map
+- **Search** — filename search, quick filters (favorites, archive, not-in-album), tag filtering, and date ranges
+- **Smart search** — CLIP semantic search when machine learning is enabled on the server
+- **Lightbox** — full viewer with EXIF metadata, GPS coordinates, camera info, download, and local file path with Reveal in Finder
 
-## Project layout
+### Organization
+- Per-folder album assignment (manual, by device name, or by folder name)
+- Create albums and reorganize previously-uploaded assets
+- Tag-based filtering with multi-select combobox
 
-```
-src/                  React frontend (components, hooks, lib/tauri.ts)
-src-tauri/src/
-  api/                Immich API client + types
-  sync/               engine, watcher, queue, hasher
-  commands.rs         Tauri IPC commands
-  config.rs           persisted settings (JSON)
-  db.rs               SQLite: hash cache, queue, history
-  keychain.rs         OS keychain access for the API key
-  tray.rs             system tray menu + events
-  lib.rs              app setup, plugin + state wiring
-```
+### Security
+- Credentials stored in the OS keychain (macOS Keychain, Windows Credential Manager, Linux Secret Service) — never written to disk
+- Trust-on-first-use **certificate pinning** for self-signed servers
+- Least-privilege IPC capabilities
+- Content Security Policy enforced
 
-## Prerequisites
+### Desktop integration
+- System tray with connection-aware status icons and live queue depth
+- Minimize-to-tray on close
+- Launch on login
+- Single-instance (second launch focuses the existing window)
+- Light, dark, and system theme
+- **Free Up Space** — safely trash local files already backed up (verified by checksum)
+- Log viewer with level/category filtering and export
 
-- [Rust](https://rustup.rs/) (stable) and the platform's Tauri build
-  dependencies — see https://tauri.app/start/prerequisites/.
-- Node 18+ and **pnpm** (`npm i -g pnpm`).
-- Linux only: the keychain uses Secret Service, so `libsecret` must be present
-  (`libsecret-1-dev` on Debian/Ubuntu).
+## Install
 
-## Develop
+Download the latest release for your platform from [GitHub Releases](https://github.com/nickdwhite/immichBEAM/releases):
+
+| Platform | Format |
+|----------|--------|
+| macOS | `.dmg` (universal) |
+| Windows | `.msi` or `.exe` (NSIS) |
+| Linux | `.deb` or `.AppImage` |
+
+## Getting started
+
+1. Launch immichBEAM — it appears in your system tray
+2. Open the dashboard (click the tray icon or select **Open Dashboard**)
+3. Go to **Server** — enter your Immich server URL and authenticate with an API key or email/password
+4. Go to **Folders** — add folders to watch
+5. Your photos start syncing automatically — monitor progress in **Overview** or **Queue**
+
+## Build from source
+
+### Prerequisites
+
+- [Rust](https://rustup.rs/) (stable) and your platform's [Tauri dependencies](https://tauri.app/start/prerequisites/)
+- Node 18+ and [pnpm](https://pnpm.io/)
+- Linux: `libsecret-1-dev` (Debian/Ubuntu) for keychain support
+
+### Development
 
 ```bash
 pnpm install
 pnpm tauri dev
 ```
 
-## Build installers
+### Build installers
 
 ```bash
 pnpm tauri build
 ```
 
-Produces `.dmg` (macOS), `.msi`/NSIS (Windows), and `.deb`/`.AppImage` (Linux).
+## Tech stack
 
-## First run
+| Layer | Technology |
+|-------|-----------|
+| Framework | [Tauri 2](https://tauri.app) |
+| Frontend | React 19, TypeScript, Tailwind CSS |
+| Backend | Rust (tokio, reqwest, rusqlite) |
+| Database | SQLite with WAL mode and connection pooling |
+| File watching | [notify](https://docs.rs/notify) with debouncing |
 
-1. Open the dashboard from the tray.
-2. **Server** tab → enter your server URL (e.g. `http://192.168.2.119:2283`) and
-   an Immich API key (Account Settings → API Keys), then **Test Connection** and
-   **Save**.
-3. **Folders** tab → add one or more folders to watch.
-4. New and existing media is hashed, de-duplicated, and uploaded automatically;
-   watch progress in the **Queue** tab.
+## Immich compatibility
 
-## Notes
+Tested with Immich v2.x. Includes forward-compatibility shims for upcoming v3 API changes (visibility enum, duration format, search fields).
 
-- In the current private-repo setup, updates are manual: download installers
-  from GitHub Release assets. The in-app updater wiring is present, but should
-  stay disabled until releases move to a public feed or an authenticated update
-  endpoint. Step-by-step in `docs/RELEASING.md`.
-- The app icon and tray icons are generated from the brand artwork in `design/`
-  (`design/logo-master.png` via `design/generate_logo.py` /
-  `generate_state_icons.py`, then `pnpm tauri icon`). See `design/README.md`.
+## License
+
+MIT
