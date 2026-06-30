@@ -563,19 +563,17 @@ impl ImmichClient {
     }
 
     /// `POST /api/search/smart` — CLIP semantic search (needs machine-learning
-    /// enabled on the server). Returns the same shape as metadata search.
+    /// enabled on the server). Accepts the same filter set as `search_assets`
+    /// so results can be scoped by person, city, type, date range, etc.
     pub async fn smart_search(
         &self,
-        query: &str,
-        page: u32,
-        size: u32,
+        search: &MetadataSearch,
     ) -> Result<MetadataSearchResponse> {
-        let body = serde_json::json!({
-            "query": query,
-            "page": page,
-            "size": size.min(1000),
-            "withExif": false,
-        });
+        let mut body = serde_json::to_value(search)?;
+        if let Some(obj) = body.as_object_mut() {
+            obj.insert("size".into(), serde_json::json!(search.size.min(1000)));
+            obj.insert("withExif".into(), false.into());
+        }
         let resp = self
             .authed(self.http.post(self.url("/api/search/smart")))
             .json(&body)

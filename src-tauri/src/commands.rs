@@ -512,16 +512,15 @@ pub async fn browse_search(
 }
 
 /// `POST /api/search/smart` — CLIP semantic search (needs ML on the server).
+/// Accepts the same filter set as `browse_search` so results can be scoped.
 #[tauri::command]
 pub async fn browse_smart(
     engine: State<'_, SyncEngine>,
-    query: String,
-    page: u32,
-    size: u32,
+    search: MetadataSearch,
 ) -> CmdResult<BrowsePage> {
     let client = engine.client().await.ok_or("Not connected to a server")?;
     let resp = client
-        .smart_search(&query, page, size)
+        .smart_search(&search)
         .await
         .map_err(map_err)?;
     Ok(BrowsePage {

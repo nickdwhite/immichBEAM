@@ -1,12 +1,25 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { api } from "../lib/tauri";
 import { personUrl } from "../lib/assetUrl";
+import { FilterBar, type TypeFilter } from "./FilterBar";
+import { SmartResults } from "./SmartResults";
 import type { Person } from "../types";
 
-export function PeopleView({ onOpen }: { onOpen: (person: Person) => void }) {
+export function PeopleView({
+  onOpen,
+  serverUrl,
+  onPersonClick,
+}: {
+  onOpen: (person: Person) => void;
+  serverUrl: string;
+  onPersonClick?: (personId: string, name: string) => void;
+}) {
   const [people, setPeople] = useState<Person[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const [smartMode, setSmartMode] = useState(false);
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
 
   useEffect(() => {
     let cancelled = false;
@@ -16,6 +29,13 @@ export function PeopleView({ onOpen }: { onOpen: (person: Person) => void }) {
       .catch((e) => { if (!cancelled) setError(String(e)); });
     return () => { cancelled = true; };
   }, []);
+
+  const filtered = useMemo(() => {
+    if (!people) return [];
+    const q = query.trim().toLowerCase();
+    if (!q) return people;
+    return people.filter((p) => (p.name ?? "").toLowerCase().includes(q));
+  }, [people, query]);
 
   if (error) {
     return (
@@ -40,25 +60,45 @@ export function PeopleView({ onOpen }: { onOpen: (person: Person) => void }) {
   }
 
   return (
-    <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
-      {people.map((p) => (
-        <button
-          key={p.id}
-          onClick={() => onOpen(p)}
-          title={p.name || "Unnamed"}
-          className="flex flex-col items-center gap-1.5 rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
-        >
-          <img
-            src={personUrl(p.id)}
-            alt={p.name ?? ""}
-            loading="lazy"
-            className="h-16 w-16 rounded-full bg-slate-200 object-cover dark:bg-slate-700"
-          />
-          <span className="max-w-full truncate text-xs text-slate-600 dark:text-slate-300">
-            {p.name || "Unnamed"}
-          </span>
-        </button>
-      ))}
+    <div className="space-y-3">
+      <FilterBar
+        query={query}
+        onQueryChange={setQuery}
+        placeholder="Search by name…"
+        smartPlaceholder="Smart search — describe what's in the photo…"
+        smartMode={smartMode}
+        onSmartModeChange={setSmartMode}
+        typeFilter={smartMode ? typeFilter : undefined}
+        onTypeChange={smartMode ? setTypeFilter : undefined}
+      />
+      {smartMode ? (
+        <SmartResults query={query} serverUrl={serverUrl} typeFilter={typeFilter} onPersonClick={onPersonClick} />
+      ) : filtered.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-slate-300 p-10 text-center text-sm text-slate-400 dark:border-slate-700">
+          No people match your search.
+        </p>
+      ) : (
+        <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+          {filtered.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => onOpen(p)}
+              title={p.name || "Unnamed"}
+              className="flex flex-col items-center gap-1.5 rounded-lg p-2 hover:bg-slate-100 dark:hover:bg-slate-800"
+            >
+              <img
+                src={personUrl(p.id)}
+                alt={p.name ?? ""}
+                loading="lazy"
+                className="h-16 w-16 rounded-full bg-slate-200 object-cover dark:bg-slate-700"
+              />
+              <span className="max-w-full truncate text-xs text-slate-600 dark:text-slate-300">
+                {p.name || "Unnamed"}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

@@ -11,7 +11,7 @@ export interface BrowseFilters {
   isNotInAlbum: boolean;
   takenAfter: string;
   takenBefore: string;
-  tagId: string;
+  tagIds: string[];
 }
 
 export const DEFAULT_FILTERS: BrowseFilters = {
@@ -22,7 +22,7 @@ export const DEFAULT_FILTERS: BrowseFilters = {
   isNotInAlbum: false,
   takenAfter: "",
   takenBefore: "",
-  tagId: "",
+  tagIds: [],
 };
 
 export type BrowseMode = "metadata" | "smart";
@@ -30,17 +30,13 @@ export type BrowseMode = "metadata" | "smart";
 export function useBrowse(filters: BrowseFilters, mode: BrowseMode) {
   const fetchPage = useCallback(
     async (page: number): Promise<BrowsePage> => {
-      if (mode === "smart") {
-        const q = filters.query.trim();
-        if (!q) return { items: [], nextPage: null };
-        return api.browseSmart(q, page, PAGE_SIZE);
-      }
       const q = filters.query.trim() || undefined;
-      return api.browseSearch({
+      if (mode === "smart" && !q) return { items: [], nextPage: null };
+      const search = {
         page,
         size: PAGE_SIZE,
         query: q,
-        originalFileName: q,
+        originalFileName: mode === "metadata" ? q : undefined,
         type: filters.type === "all" ? undefined : filters.type,
         isFavorite: filters.isFavorite || undefined,
         isArchived: filters.isArchived || undefined,
@@ -48,8 +44,11 @@ export function useBrowse(filters: BrowseFilters, mode: BrowseMode) {
         isNotInAlbum: filters.isNotInAlbum || undefined,
         takenAfter: filters.takenAfter || undefined,
         takenBefore: filters.takenBefore || undefined,
-        tagIds: filters.tagId ? [filters.tagId] : undefined,
-      });
+        tagIds: filters.tagIds.length > 0 ? filters.tagIds : undefined,
+      };
+      return mode === "smart"
+        ? api.browseSmart(search)
+        : api.browseSearch(search);
     },
     [filters, mode],
   );

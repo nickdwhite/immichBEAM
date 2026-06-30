@@ -124,8 +124,8 @@ export const api = {
     }),
   browseSearch: (search: MetadataSearch) =>
     invoke<BrowsePage>("browse_search", { search }),
-  browseSmart: (query: string, page: number, size: number) =>
-    invoke<BrowsePage>("browse_smart", { query, page, size }),
+  browseSmart: (search: MetadataSearch) =>
+    invoke<BrowsePage>("browse_smart", { search }),
   getAssetDetail: (assetId: string) =>
     invoke<AssetDetail>("get_asset_detail", { assetId }),
   browseTags: () => invoke<Tag[]>("browse_tags"),

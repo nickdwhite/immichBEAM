@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState } from "react";
 import { Images, LayoutGrid, Loader2, Map as MapIcon, MapPin, Users } from "lucide-react";
 import { isServerConfigured } from "../lib/config";
+import { toggleChip } from "./FilterBar";
 import { TimelineGrid } from "./TimelineGrid";
 import { AlbumList } from "./AlbumList";
 import { AlbumView } from "./AlbumView";
@@ -8,8 +9,6 @@ import { PeopleView } from "./PeopleView";
 import { PlacesView } from "./PlacesView";
 import { AssetResults } from "./AssetResults";
 
-// Lazy-load MapView (pulls in Leaflet + markercluster — ~227 KB) so it only
-// loads when the user opens the Map tab, not on initial app load.
 const MapView = lazy(() =>
   import("./MapView").then((m) => ({ default: m.MapView })),
 );
@@ -24,13 +23,6 @@ const MODES: { id: Mode; label: string; Icon: typeof Images }[] = [
   { id: "places", label: "Places", Icon: MapPin },
   { id: "map", label: "Map", Icon: MapIcon },
 ];
-
-const chip = (active: boolean): string =>
-  `inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
-    active
-      ? "bg-brand-600 text-white"
-      : "border border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-  }`;
 
 interface ResultsView {
   title: string;
@@ -78,7 +70,7 @@ export function PhotoBrowser({ config }: { config: ConfigDto }) {
               key={id}
               onClick={() => setMode(id)}
               aria-pressed={mode === id}
-              className={chip(mode === id)}
+              className={toggleChip(mode === id)}
             >
               <Icon size={14} /> {label}
             </button>
@@ -107,11 +99,11 @@ export function PhotoBrowser({ config }: { config: ConfigDto }) {
           onPersonClick={handlePersonClick}
         />
       ) : mode === "albums" ? (
-        <AlbumList onOpen={setOpenedAlbum} />
+        <AlbumList onOpen={setOpenedAlbum} serverUrl={config.server_url} onPersonClick={handlePersonClick} />
       ) : mode === "people" ? (
-        <PeopleView onOpen={openPerson} />
+        <PeopleView onOpen={openPerson} serverUrl={config.server_url} onPersonClick={handlePersonClick} />
       ) : mode === "places" ? (
-        <PlacesView onOpen={openPlace} />
+        <PlacesView onOpen={openPlace} serverUrl={config.server_url} onPersonClick={handlePersonClick} />
       ) : (
         <Suspense
           fallback={

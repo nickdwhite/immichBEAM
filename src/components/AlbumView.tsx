@@ -1,38 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  ArrowLeft,
-  Image as ImageIcon,
-  Images,
-  Loader2,
-  Search,
-  Video,
-} from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { api } from "../lib/tauri";
+import { FilterBar, type TypeFilter } from "./FilterBar";
 import { PhotoTile } from "./PhotoTile";
 import { PhotoLightbox } from "./PhotoLightbox";
 import { VirtualGrid } from "./VirtualGrid";
 import type { Album, BrowseAsset } from "../types";
-
-type TypeFilter = "all" | "IMAGE" | "VIDEO";
-
-const TYPE_CHIPS: { id: TypeFilter; label: string; Icon: typeof Images }[] = [
-  { id: "all", label: "All", Icon: Images },
-  { id: "IMAGE", label: "Photos", Icon: ImageIcon },
-  { id: "VIDEO", label: "Videos", Icon: Video },
-];
 
 function extOf(a: BrowseAsset): string {
   const fromName = a.originalFileName?.split(".").pop();
   if (fromName) return fromName.toLowerCase();
   return a.originalMimeType ? (a.originalMimeType.split("/").pop() ?? "") : "";
 }
-
-const chip = (active: boolean): string =>
-  `inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
-    active
-      ? "bg-brand-600 text-white"
-      : "border border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-  }`;
 
 export function AlbumView({
   album,
@@ -115,37 +94,19 @@ export function AlbumView({
         </span>
       </div>
 
-      {/* Client-side filters (the album endpoint returns the full set) */}
       {!loading && items.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-[12rem] flex-1">
-            <Search
-              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
-              size={15}
-            />
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Filter by filename…"
-              className="w-full rounded-lg border-slate-300 py-1.5 pl-8 pr-3 text-sm dark:border-slate-700 dark:bg-slate-800"
-            />
-          </div>
-          {TYPE_CHIPS.map(({ id, label, Icon }) => (
-            <button
-              key={id}
-              onClick={() => setType(id)}
-              aria-pressed={type === id}
-              className={chip(type === id)}
-            >
-              <Icon size={14} /> {label}
-            </button>
-          ))}
+        <FilterBar
+          query={query}
+          onQueryChange={setQuery}
+          placeholder="Search by filename…"
+          typeFilter={type}
+          onTypeChange={setType}
+        >
           <select
             value={ext}
             onChange={(e) => setExt(e.target.value)}
             title="File type"
-            className="rounded-lg border-slate-300 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-800"
+            className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
           >
             {extensions.map((e) => (
               <option key={e} value={e}>
@@ -153,7 +114,7 @@ export function AlbumView({
               </option>
             ))}
           </select>
-        </div>
+        </FilterBar>
       )}
 
       {error && (

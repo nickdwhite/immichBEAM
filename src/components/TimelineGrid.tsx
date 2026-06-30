@@ -2,37 +2,20 @@ import { useEffect, useState } from "react";
 import {
   Archive,
   Calendar,
-  Image as ImageIcon,
   Images,
   Loader2,
-  Search,
-  Sparkles,
   Star,
-  Video,
 } from "lucide-react";
 import { DEFAULT_FILTERS, useBrowse, type BrowseFilters, type BrowseMode } from "../hooks/useBrowse";
 import { useInfiniteScroll } from "../hooks/useInfiniteScroll";
 import { api } from "../lib/tauri";
+import { FilterBar, toggleChip, type ChipDef } from "./FilterBar";
 import { PhotoTile } from "./PhotoTile";
 import { PhotoLightbox } from "./PhotoLightbox";
 import { RangeCalendar } from "./RangeCalendar";
+import { TagInput } from "./TagInput";
 import { VirtualGrid } from "./VirtualGrid";
 import type { BrowseAsset, Tag } from "../types";
-
-type TypeFilter = BrowseFilters["type"];
-
-const TYPE_CHIPS: { id: TypeFilter; label: string; Icon: typeof Images }[] = [
-  { id: "all", label: "All", Icon: Images },
-  { id: "IMAGE", label: "Photos", Icon: ImageIcon },
-  { id: "VIDEO", label: "Videos", Icon: Video },
-];
-
-const toggleChip = (active: boolean): string =>
-  `inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
-    active
-      ? "bg-brand-600 text-white"
-      : "border border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
-  }`;
 
 /** Local YYYY-MM-DD for today shifted back by the given days/months/years. */
 function shiftDate(days = 0, months = 0, years = 0): string {
@@ -88,6 +71,12 @@ export function TimelineGrid({
   ) => setFilters((f) => ({ ...f, [key]: value }));
 
   const smartActive = mode === "smart";
+
+  const extraChips: ChipDef[] = [
+    { key: "fav", label: "Favorites", icon: Star, active: filters.isFavorite, onToggle: () => set("isFavorite", !filters.isFavorite) },
+    { key: "arch", label: "Archive", icon: Archive, active: filters.isArchived, onToggle: () => set("isArchived", !filters.isArchived) },
+    { key: "noAlbum", label: "Not in album", icon: Images, active: filters.isNotInAlbum, onToggle: () => set("isNotInAlbum", !filters.isNotInAlbum) },
+  ];
   const hasDate = Boolean(filters.takenAfter || filters.takenBefore);
 
   const presets = [
@@ -107,103 +96,37 @@ export function TimelineGrid({
 
   return (
     <div className="space-y-3">
-      {/* Search bar + smart/metadata toggle */}
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Search
-            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400"
-            size={15}
-          />
-          <input
-            type="search"
-            value={filters.query}
-            onChange={(e) => set("query", e.target.value)}
-            placeholder={
-              smartActive
-                ? "Smart search — describe what's in the photo…"
-                : "Search by filename (e.g. logo, .png)…"
-            }
-            className="w-full rounded-lg border-slate-300 py-1.5 pl-8 pr-3 text-sm dark:border-slate-700 dark:bg-slate-800"
-          />
-        </div>
+      <FilterBar
+        query={filters.query}
+        onQueryChange={(q) => set("query", q)}
+        placeholder="Search by filename (e.g. logo, .png)…"
+        smartPlaceholder="Smart search — describe what's in the photo…"
+        smartMode={smartActive}
+        onSmartModeChange={(s) => setMode(s ? "smart" : "metadata")}
+        typeFilter={filters.type}
+        onTypeChange={(t) => set("type", t)}
+        chips={extraChips}
+      >
         <button
-          onClick={() => setMode(smartActive ? "metadata" : "smart")}
-          aria-pressed={smartActive}
-          title={
-            smartActive
-              ? "Switch to metadata search"
-              : "Switch to smart (semantic/CLIP) search — needs machine-learning on the server"
-          }
-          className={toggleChip(smartActive)}
+          onClick={() => setShowAdvanced((s) => !s)}
+          aria-pressed={showAdvanced}
+          aria-expanded={showAdvanced}
+          title="Filter by date taken"
+          className={toggleChip(showAdvanced || hasDate)}
         >
-          <Sparkles size={14} /> Smart
+          <Calendar size={14} /> Dates
         </button>
-      </div>
+      </FilterBar>
 
-      {/* Type + quick filters (metadata mode only — smart search takes a query alone) */}
-      {!smartActive && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {TYPE_CHIPS.map(({ id, label, Icon }) => (
-            <button
-              key={id}
-              onClick={() => set("type", id)}
-              aria-pressed={filters.type === id}
-              className={toggleChip(filters.type === id)}
-            >
-              <Icon size={14} /> {label}
-            </button>
-          ))}
-          <span className="mx-1 h-4 w-px bg-slate-200 dark:bg-slate-700" />
-          <button
-            onClick={() => set("isFavorite", !filters.isFavorite)}
-            aria-pressed={filters.isFavorite}
-            className={toggleChip(filters.isFavorite)}
-          >
-            <Star size={14} /> Favorites
-          </button>
-          <button
-            onClick={() => set("isArchived", !filters.isArchived)}
-            aria-pressed={filters.isArchived}
-            className={toggleChip(filters.isArchived)}
-          >
-            <Archive size={14} /> Archive
-          </button>
-          <button
-            onClick={() => set("isNotInAlbum", !filters.isNotInAlbum)}
-            aria-pressed={filters.isNotInAlbum}
-            className={toggleChip(filters.isNotInAlbum)}
-          >
-            <Images size={14} /> Not in album
-          </button>
-          {tags.length > 0 && (
-            <select
-              value={filters.tagId}
-              onChange={(e) => set("tagId", e.target.value)}
-              title="Filter by tag"
-              className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
-            >
-              <option value="">All tags</option>
-              {tags.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.value ?? t.name ?? t.id}
-                </option>
-              ))}
-            </select>
-          )}
-          <button
-            onClick={() => setShowAdvanced((s) => !s)}
-            aria-pressed={showAdvanced}
-            aria-expanded={showAdvanced}
-            title="Filter by date taken"
-            className={toggleChip(showAdvanced || hasDate)}
-          >
-            <Calendar size={14} /> Dates
-          </button>
-        </div>
+      {tags.length > 0 && (
+        <TagInput
+          tags={tags}
+          selectedIds={filters.tagIds}
+          onChange={(ids) => set("tagIds", ids)}
+        />
       )}
 
-      {/* Date filter — quick ranges + custom range */}
-      {!smartActive && showAdvanced && (
+      {showAdvanced && (
         <div className="rounded-xl border border-slate-200 bg-white p-3 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-900">
           <div className="space-y-1.5">
             <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
