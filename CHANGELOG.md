@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Immich Beam are documented here. The format follows
+All notable changes to immichBEAM are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/).
 
@@ -52,7 +52,7 @@ All notable changes to Immich Beam are documented here. The format follows
 - **File size in History** — each history row shows the file size as a compact
   badge; hovering the filename includes the size in the tooltip. Backed by a new
   `size` column in `upload_history`, backfilled from cached file hashes.
-- **Database rename** — `dock.db` (legacy "Immich Dock" branding) is
+- **Database rename** — `dock.db` (legacy branding) is
   automatically migrated to `immich-beam.db` on first launch, including WAL/SHM
   sidecar files.
 
@@ -95,7 +95,7 @@ All notable changes to Immich Beam are documented here. The format follows
   full file path as the ID, enabling the "reveal in Finder" and tooltip features.
 - **Device album name** — stripped domain suffix from hostname (e.g.
   `host.local` → `host`) for cleaner album names on the Immich server.
-- Sidebar still said "Immich Dock" in one place — fixed to "Immich Beam".
+- Sidebar still said "Immich Dock" in one place — fixed.
 - Server URL placeholder changed from a specific IP to `http://your-server:2283`.
 
 ## [0.3.6] - 2026-06-28
@@ -128,7 +128,7 @@ All notable changes to Immich Beam are documented here. The format follows
 
 ## [0.3.1] - 2026-06-22
 
-The "immich-beam" release: a full rebrand plus a round of features, security
+The "immichBEAM" release: a full rebrand plus a round of features, security
 hardening, and dependency cleanup on top of the initial client.
 
 ### Added
@@ -154,8 +154,8 @@ hardening, and dependency cleanup on top of the initial client.
 
 ### Changed
 
-- **Rebranded** from "Immich SyncDesk" to **Immich Beam** — name, bundle
-  identifier (`com.immichdock.desktop`), keychain service, app-data dir, logs,
+- **Rebranded** from "Immich SyncDesk" to **immichBEAM** — name, bundle
+  identifier (`com.immichbeam.desktop`), keychain service, app-data dir, logs,
   and user agent.
 - **New logo & icons** — a blue cloud + photo-swirl + sync-arrows mark; a
   macOS-style squircle app icon, cloud-shaped status tray icons, and a
@@ -194,7 +194,7 @@ limits and streaming progress, per-folder albums, "Free Up Space", a grouped
 dashboard, OS-keychain API-key storage, in-app auto-update wiring, and CI +
 release workflows for macOS / Windows / Linux.
 
-[0.3.7]: https://github.com/nickdwhite/immich-beam/releases/tag/v0.3.7
-[0.3.6]: https://github.com/nickdwhite/immich-beam/releases/tag/v0.3.6
-[0.3.1]: https://github.com/nickdwhite/immich-beam/releases/tag/v0.3.1
-[0.1.0]: https://github.com/nickdwhite/immich-beam/releases/tag/v0.1.0
+[0.3.7]: https://github.com/nickdwhite/immichBEAM/releases/tag/v0.3.7
+[0.3.6]: https://github.com/nickdwhite/immichBEAM/releases/tag/v0.3.6
+[0.3.1]: https://github.com/nickdwhite/immichBEAM/releases/tag/v0.3.1
+[0.1.0]: https://github.com/nickdwhite/immichBEAM/releases/tag/v0.1.0

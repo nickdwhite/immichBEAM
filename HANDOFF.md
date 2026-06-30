@@ -5,11 +5,11 @@ Last updated: 2026-06-29
 ## Repo and branch state
 
 - Local repo path: `/Users/ndw-eiq/Downloads/projects/immich-syncdesk`
-- App name: **Immich Beam** (package/folder still `immich-syncdesk`, intentionally unchanged)
+- App name: **immichBEAM** (package/folder still `immich-syncdesk`, intentionally unchanged)
 - Version: `0.3.8` (`tauri.conf.json`, `Cargo.toml`, `package.json`)
 - **Active branch: `feat/remote-browser`** — ready to push + PR.
-- GitHub repo: `nickdwhite/immich-beam` — <https://github.com/nickdwhite/immich-beam>
-- Git remote: `origin https://github.com/nickdwhite/immich-beam.git`
+- GitHub repo: `nickdwhite/immich-beam` — <https://github.com/nickdwhite/immichBEAM>
+- Git remote: `origin https://github.com/nickdwhite/immichBEAM.git`
 - GitHub CLI (`gh`) installed + authenticated for `nickdwhite` (HTTPS).
 - All commits unsigned (no `gpg` installed on this machine).
 
