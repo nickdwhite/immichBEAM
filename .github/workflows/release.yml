@@ -23,10 +23,10 @@ jobs:
           - platform: macos-latest
             args: "--target universal-apple-darwin"
             rust-targets: "aarch64-apple-darwin,x86_64-apple-darwin"
-          - platform: ubuntu-24.04
+          - platform: ubuntu-26.04
             args: ""
             rust-targets: ""
-          - platform: ubuntu-24.04-arm
+          - platform: ubuntu-26.04-arm
             args: ""
             rust-targets: ""
           - platform: windows-latest

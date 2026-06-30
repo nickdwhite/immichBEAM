@@ -10,7 +10,7 @@ on:
 
 jobs:
   frontend:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -32,8 +32,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - platform: ubuntu-24.04
-          - platform: ubuntu-24.04-arm
+          - platform: ubuntu-26.04
+          - platform: ubuntu-26.04-arm
           - platform: windows-latest
           # Windows arm64 hosted runners are still public preview as of
           # 2026-06-27, so keep this signal non-blocking in CI for now.
