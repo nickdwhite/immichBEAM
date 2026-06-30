@@ -1,7 +1,7 @@
 {
   "name": "immich-beam",
   "private": true,
-  "version": "0.4.0-beta.1",
+  "version": "0.4.0",
   "type": "module",
   "description": "Cross-platform desktop sync client for Immich",
   "scripts": {

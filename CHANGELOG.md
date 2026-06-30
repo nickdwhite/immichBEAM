@@ -4,7 +4,7 @@ All notable changes to immichBEAM are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/), and the project aims to follow
 [Semantic Versioning](https://semver.org/).
 
-## [0.4.0-beta.1] - 2026-06-29
+## [0.4.0] - 2026-06-30
 
 ### Added
 
@@ -38,6 +38,14 @@ All notable changes to immichBEAM are documented here. The format follows
 ### Dependencies
 
 - Added `leaflet` 1.9.4 and `leaflet.markercluster` 1.5.3.
+
+### Changed
+
+- Standardized all user-facing branding to "immichBEAM".
+- Overview dashboard now shows local file count and server asset count.
+- Complete README rewrite with screenshots, feature list, and install guide.
+- Removed internal docs, design files, unused icons, and scaffold files from
+  distribution.
 
 ## [0.3.8] - 2026-06-28
 
@@ -194,6 +202,7 @@ limits and streaming progress, per-folder albums, "Free Up Space", a grouped
 dashboard, OS-keychain API-key storage, in-app auto-update wiring, and CI +
 release workflows for macOS / Windows / Linux.
 
+[0.4.0]: https://github.com/nickdwhite/immichBEAM/releases/tag/v0.4.0
 [0.3.7]: https://github.com/nickdwhite/immichBEAM/releases/tag/v0.3.7
 [0.3.6]: https://github.com/nickdwhite/immichBEAM/releases/tag/v0.3.6
 [0.3.1]: https://github.com/nickdwhite/immichBEAM/releases/tag/v0.3.1
