@@ -47,6 +47,7 @@ scratch/
 # Private cross-tool work queue (planning/tasks/decisions) — never commit
 .workspace/
 
-# Internal docs not for public consumption
+# Internal docs and design tooling — not for public consumption
 docs/
 HANDOFF.md
+design/
