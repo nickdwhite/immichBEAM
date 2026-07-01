@@ -17,10 +17,24 @@
 ---
 
 <p align="center">
+  <a href="#about">About</a> &middot;
+  <a href="#screenshots">Screenshots</a> &middot;
+  <a href="#features">Features</a> &middot;
+  <a href="#install">Install</a> &middot;
+  <a href="#getting-started">Getting started</a> &middot;
+  <a href="#build-from-source">Build from source</a> &middot;
+  <a href="#tech-stack">Tech stack</a> &middot;
+  <a href="#testing-status">Testing</a> &middot;
+  <a href="#roadmap">Roadmap</a>
+</p>
+
+---
+
+<p align="center">
   <img src="screenshots/overview.png" width="720" alt="Overview dashboard" />
 </p>
 
-## What it does
+## About
 
 immichBEAM sits in your system tray and keeps your photos and videos backed up to your self-hosted [Immich](https://immich.app) server. Think Google Drive or Dropbox, but for your photo library.
 
@@ -29,6 +43,12 @@ immichBEAM sits in your system tray and keeps your photos and videos backed up t
 - **Smart search** with CLIP semantic search ("sunset at the beach")
 - **System tray** with live status, pause/resume, and quick actions
 - **Cross-platform** — macOS, Windows, and Linux
+
+This is the third iteration of building an Immich desktop client. The initial use case was a simple Windows app easy enough for my wife or mom to use. Then I realized 30% of my MacBook drive was filled with old photos and videos, so I decided to make it cross-platform. And it has spiraled from there.
+
+Built almost entirely with AI coding agents: initial design and architecture with Claude (Fable 5), core development with Claude (Opus 4.6), some work with Codex (GPT-5.4) and OpenCode (GLM 5.2). Graphics created with Gab.ai, Gemini, and GIMP.
+
+**Help wanted:** If you're running Linux or ARM hardware, testing and bug reports are especially valuable. Open an issue with your platform, Immich server version, and what broke. The app has a built-in log viewer (Settings > Logs) with level filtering and export — attach debug logs to your issue for faster diagnosis.
 
 ## Screenshots
 
@@ -149,6 +169,17 @@ pnpm tauri build
 ## Immich compatibility
 
 Tested with Immich v2.x. Includes forward-compatibility shims for upcoming v3 API changes (visibility enum, duration format, search fields).
+
+## Testing status
+
+| Platform | Status | Notes |
+|----------|--------|-------|
+| macOS (Intel) | Moderate testing | Primary dev machine |
+| macOS (Apple Silicon) | Builds via universal binary | Needs real-world testing |
+| Windows 10/11 (x64) | Moderate testing | Working well |
+| Windows (ARM) | CI builds | Untested — testers welcome |
+| Ubuntu 24.04+ (x64) | CI builds | Light testing — needs more |
+| Ubuntu (ARM) | CI builds | Untested — testers welcome |
 
 ## Roadmap
 
