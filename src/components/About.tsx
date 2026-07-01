@@ -4,7 +4,6 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { ExternalLink, Github } from "lucide-react";
 import { UpdateChecker } from "./UpdateChecker";
 import { Logo } from "./Logo";
-import { IN_APP_UPDATES_ENABLED } from "../lib/release";
 
 export function About() {
   const [version, setVersion] = useState("");
@@ -44,20 +43,7 @@ export function About() {
         <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
           Updates
         </h3>
-        {IN_APP_UPDATES_ENABLED ? (
-          <UpdateChecker />
-        ) : (
-          <div className="space-y-2">
-            <p className="text-sm text-slate-600 dark:text-slate-300">
-              Manual downloads only in the current private-repo release setup.
-            </p>
-            <p className="text-xs text-slate-400">
-              GitHub Actions builds draft releases for macOS, Windows, and
-              Linux. Install new versions from the release assets until a public
-              or authenticated update feed is configured.
-            </p>
-          </div>
-        )}
+        <UpdateChecker />
       </div>
 
       <div className="border-t border-slate-200 pt-5 dark:border-slate-800">
