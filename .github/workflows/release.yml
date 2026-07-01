@@ -102,5 +102,19 @@ jobs:
           releaseName: "immichBEAM ${{ github.ref_type == 'tag' && github.ref_name || github.run_number }}"
           releaseBody: "Download the installer for your platform from the assets below."
           releaseDraft: true
-          prerelease: false
+          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
           args: ${{ matrix.args }}
+
+      # For prerelease tags (v*-beta* or v*-rc*): upload latest-beta.json and
+      # force-move the `beta` tag so the beta endpoint always resolves.
+      - name: Publish beta feed + move beta tag
+        if: contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc')
+        run: |
+          TAG="${{ github.ref_name }}"
+          gh release download "$TAG" --repo nickdwhite/immichBEAM --pattern "latest.json" --dir /tmp/
+          cp /tmp/latest.json /tmp/latest-beta.json
+          gh release upload "$TAG" /tmp/latest-beta.json --repo nickdwhite/immichBEAM --clobber
+          git tag -f beta "$GITHUB_SHA"
+          git push origin beta --force
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

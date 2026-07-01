@@ -40,6 +40,7 @@ export interface AppConfig {
   follow_symlinks: boolean;
   debounce_secs: number;
   max_retries: number;
+  update_channel: string;
 }
 
 export interface ConfigDto extends AppConfig {

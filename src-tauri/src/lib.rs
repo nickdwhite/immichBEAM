@@ -234,6 +234,7 @@ pub fn run() {
             commands::free_space,
             updater::check_for_update,
             updater::install_update,
+            updater::set_update_channel,
         ])
         .run(tauri::generate_context!())
         .expect("error while running immichBEAM");

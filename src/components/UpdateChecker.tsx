@@ -6,6 +6,7 @@ import type { UpdateInfo, UpdateProgress } from "../types";
 
 export function UpdateChecker() {
   const [version, setVersion] = useState("");
+  const [channel, setChannel] = useState("stable");
   const [checking, setChecking] = useState(false);
   const [installing, setInstalling] = useState(false);
   const [progress, setProgress] = useState<UpdateProgress | null>(null);
@@ -14,6 +15,7 @@ export function UpdateChecker() {
 
   useEffect(() => {
     getVersion().then(setVersion).catch(() => {});
+    api.getConfig().then((c) => setChannel(c.update_channel || "stable")).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -48,6 +50,12 @@ export function UpdateChecker() {
     }
   };
 
+  const handleChannelChange = async (value: string) => {
+    setChannel(value);
+    api.setUpdateChannel(value).catch(() => {});
+    setResult(null);
+  };
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
@@ -57,18 +65,29 @@ export function UpdateChecker() {
             Current version {version || "…"}
           </p>
         </div>
-        <button
-          onClick={check}
-          disabled={checking || installing}
-          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
-        >
-          {checking ? (
-            <Loader2 size={16} className="animate-spin" />
-          ) : (
-            <RefreshCw size={16} />
-          )}
-          Check for updates
-        </button>
+        <div className="flex items-center gap-2">
+          <select
+            value={channel}
+            onChange={(e) => handleChannelChange(e.target.value)}
+            title="Update channel"
+            className="rounded-lg border-slate-300 py-1.5 text-xs font-medium dark:border-slate-700 dark:bg-slate-800"
+          >
+            <option value="stable">Stable</option>
+            <option value="beta">Beta</option>
+          </select>
+          <button
+            onClick={check}
+            disabled={checking || installing}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:hover:bg-slate-800"
+          >
+            {checking ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <RefreshCw size={16} />
+            )}
+            Check
+          </button>
+        </div>
       </div>
 
       {result && !result.available && (

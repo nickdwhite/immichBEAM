@@ -117,6 +117,8 @@ export const api = {
 
   checkForUpdate: () => invoke<UpdateInfo>("check_for_update"),
   installUpdate: () => invoke<void>("install_update"),
+  setUpdateChannel: (channel: string) =>
+    invoke<void>("set_update_channel", { channel }),
 
   browseAssets: (page: number, size: number, assetType?: string) =>
     invoke<BrowsePage>("browse_assets", {

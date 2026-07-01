@@ -132,6 +132,9 @@ pub struct AppConfig {
 
     #[serde(default = "default_max_retries")]
     pub max_retries: u32,
+
+    #[serde(default = "default_update_channel")]
+    pub update_channel: String,
 }
 
 fn default_log_retention_days() -> u32 {
@@ -152,6 +155,10 @@ fn default_debounce_secs() -> u32 {
 
 fn default_max_retries() -> u32 {
     5
+}
+
+fn default_update_channel() -> String {
+    "stable".into()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -226,6 +233,7 @@ impl Default for AppConfig {
             follow_symlinks: false,
             debounce_secs: default_debounce_secs(),
             max_retries: default_max_retries(),
+            update_channel: default_update_channel(),
         }
     }
 }

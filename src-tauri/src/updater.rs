@@ -2,8 +2,8 @@
 //!
 //! All update operations run Rust-side and are exposed as ordinary commands, so
 //! the frontend needs no extra IPC capabilities. The update manifest
-//! (`latest.json`) and signed bundles are published with each GitHub Release;
-//! see `docs/TODO.md` for the one-time signing-key setup that activates this.
+//! (`latest.json` / `latest-beta.json`) and signed bundles are published with
+//! each GitHub Release.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -12,6 +12,16 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
 use tauri_plugin_updater::{Update, UpdaterExt};
 use tokio::sync::Mutex;
+
+/// Stable release feed — GitHub resolves `/releases/latest/` to the newest
+/// non-prerelease.
+const STABLE_ENDPOINT: &str =
+    "https://github.com/nickdwhite/immichBEAM/releases/latest/download/latest.json";
+
+/// Beta/prerelease feed — the `beta` tag is force-moved to each prerelease so
+/// this URL always points to the latest beta's manifest.
+const BETA_ENDPOINT: &str =
+    "https://github.com/nickdwhite/immichBEAM/releases/download/beta/latest-beta.json";
 
 /// Event pushed to the frontend as the update downloads.
 pub const EVT_UPDATE_PROGRESS: &str = "update://progress";
@@ -35,13 +45,31 @@ pub struct UpdateProgress {
     pub pct: u64,
 }
 
-/// Query the configured endpoint for a newer signed release.
+/// Query the configured endpoint for a newer signed release. The endpoint is
+/// selected from the user's `update_channel` config ("stable" or "beta") —
+/// both URLs are hardcoded constants; the config value is **not** interpolated
+/// into the URL, so a tampered config cannot redirect to an attacker's server.
 #[tauri::command]
 pub async fn check_for_update(
     app: AppHandle,
+    engine: State<'_, crate::sync::SyncEngine>,
     pending: State<'_, PendingUpdate>,
 ) -> Result<UpdateInfo, String> {
-    let updater = app.updater().map_err(|e| e.to_string())?;
+    let config = engine.current_config().await;
+    let endpoint = if config.update_channel == "beta" {
+        BETA_ENDPOINT
+    } else {
+        STABLE_ENDPOINT
+    };
+    let url: reqwest::Url = endpoint
+        .parse()
+        .expect("STABLE_ENDPOINT and BETA_ENDPOINT are hardcoded valid URLs");
+    let updater = app
+        .updater_builder()
+        .endpoints(vec![url])
+        .map_err(|e| e.to_string())?
+        .build()
+        .map_err(|e| e.to_string())?;
     let update = updater.check().await.map_err(|e| e.to_string())?;
     let info = match &update {
         Some(u) => UpdateInfo {
@@ -102,5 +130,24 @@ pub async fn install_update(
     // On Windows the installer exits the app for us; elsewhere we restart.
     app.restart();
     #[allow(unreachable_code)]
+    Ok(())
+}
+
+/// Set the update channel ("stable" or "beta"). Only "beta" is accepted as
+/// non-default — any other value (including injection attempts) defaults to
+/// "stable". The channel determines which hardcoded endpoint URL is used;
+/// the value is never interpolated into a URL.
+#[tauri::command]
+pub async fn set_update_channel(
+    engine: State<'_, crate::sync::SyncEngine>,
+    channel: String,
+) -> Result<(), String> {
+    let mut config = engine.current_config().await;
+    config.update_channel = if channel == "beta" {
+        "beta".to_string()
+    } else {
+        "stable".to_string()
+    };
+    engine.apply_config(config).await;
     Ok(())
 }
